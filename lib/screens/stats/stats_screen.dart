@@ -19,7 +19,14 @@ class StatsScreen extends StatelessWidget {
     final String? uid = authState is AuthAuthenticated ? authState.uid : null;
 
     if (userRole == null || uid == null) {
-      return Scaffold(body: Center(child: Text('يرجى تسجيل الدخول / Veuillez vous connecter')));
+      return Scaffold(
+        body: Center(
+          child: Text(
+            'يرجى تسجيل الدخول / Veuillez vous connecter',
+            style: TextStyle(fontSize: 20),
+          ),
+        ),
+      );
     }
 
     return BlocProvider(
@@ -48,6 +55,7 @@ class StatsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
+
                         children: [
                           StatsCard(
                             titleAr: 'إجمالي الطلاب',
@@ -168,11 +176,11 @@ class StatsScreen extends StatelessWidget {
                                 title: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(arName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                    Text(frName, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                                    Text(arName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    Text(frName, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
                                   ],
                                 ),
-                                trailing: Text('${entry.value} طالب', style: TextStyle(fontSize: 16, color: Colors.blue)),
+                                trailing: Text('${entry.value} طالب', style: TextStyle(fontSize: 18, color: Colors.blue)),
                               );
                             }).toList(),
                           ),
@@ -197,10 +205,38 @@ class StatsScreen extends StatelessWidget {
                         ),
                         child: Column(
                           children: stats.studentsPerGrade.entries.map((entry) {
+                            String gradeFr;
+                            switch (entry.key) {
+                              case '1':
+                                gradeFr = 'Première';
+                                break;
+                              case '2':
+                                gradeFr = 'Deuxième';
+                                break;
+                              case '3':
+                                gradeFr = 'Troisième';
+                                break;
+                              case '4':
+                                gradeFr = 'Quatrième';
+                                break;
+                              case '5':
+                                gradeFr = 'Cinquième';
+                                break;
+                              case '6':
+                                gradeFr = 'Sixième';
+                                break;
+                              default:
+                                gradeFr = 'Classe ${entry.key}';
+                            }
                             return ListTile(
-                              title: Text('الصف ${entry.key}',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              trailing: Text('${entry.value} طالب', style: TextStyle(fontSize: 16, color: Colors.blue)),
+                              title: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('الصف ${entry.key}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                  Text(gradeFr, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                                ],
+                              ),
+                              trailing: Text('${entry.value} طالب', style: TextStyle(fontSize: 18, color: Colors.blue)),
                             );
                           }).toList(),
                         ),
@@ -223,23 +259,23 @@ class StatsScreen extends StatelessWidget {
                           ],
                         ),
                         child: (stats.maleStudents == 0 && stats.femaleStudents == 0)
-                            ? Center(child: Text('لا توجد بيانات لتوزيع الجنس', style: TextStyle(fontSize: 16, color: Colors.grey)))
+                            ? Center(child: Text('لا توجد بيانات لتوزيع الجنس', style: TextStyle(fontSize: 18, color: Colors.grey)))
                             : PieChart(
                           PieChartData(
                             sections: [
                               PieChartSectionData(
                                 value: stats.maleStudents?.toDouble() ?? 0,
-                                title: 'الذكور (${((stats.maleStudents ?? 0) / stats.totalStudents * 100).toStringAsFixed(1)}%)',
+                                title: 'الذكور (${((stats.maleStudents ?? 0) / (stats.totalStudents != 0 ? stats.totalStudents : 1) * 100).toStringAsFixed(1)}%)',
                                 color: Colors.blue,
                                 radius: 100,
-                                titleStyle: TextStyle(fontSize: 14, color: Colors.white),
+                                titleStyle: TextStyle(fontSize: 16, color: Colors.white),
                               ),
                               PieChartSectionData(
                                 value: stats.femaleStudents?.toDouble() ?? 0,
-                                title: 'الإناث (${((stats.femaleStudents ?? 0) / stats.totalStudents * 100).toStringAsFixed(1)}%)',
+                                title: 'الإناث (${((stats.femaleStudents ?? 0) / (stats.totalStudents != 0 ? stats.totalStudents : 1) * 100).toStringAsFixed(1)}%)',
                                 color: Colors.pink,
                                 radius: 100,
-                                titleStyle: TextStyle(fontSize: 14, color: Colors.white),
+                                titleStyle: TextStyle(fontSize: 16, color: Colors.white),
                               ),
                             ],
                             sectionsSpace: 2,
@@ -265,23 +301,23 @@ class StatsScreen extends StatelessWidget {
                           ],
                         ),
                         child: (stats.presentStudents == 0 && stats.absentStudents == 0)
-                            ? Center(child: Text('لا توجد بيانات حضور اليوم', style: TextStyle(fontSize: 16, color: Colors.grey)))
+                            ? Center(child: Text('لا توجد بيانات حضور اليوم', style: TextStyle(fontSize: 18, color: Colors.grey)))
                             : PieChart(
                           PieChartData(
                             sections: [
                               PieChartSectionData(
                                 value: stats.presentStudents?.toDouble() ?? 0,
-                                title: 'حاضرون (${((stats.presentStudents ?? 0) / stats.totalStudents * 100).toStringAsFixed(1)}%)',
+                                title: 'حاضرون (${((stats.presentStudents ?? 0) / (stats.totalStudents != 0 ? stats.totalStudents : 1) * 100).toStringAsFixed(1)}%)',
                                 color: Colors.green,
                                 radius: 100,
-                                titleStyle: TextStyle(fontSize: 14, color: Colors.white),
+                                titleStyle: TextStyle(fontSize: 16, color: Colors.white),
                               ),
                               PieChartSectionData(
                                 value: stats.absentStudents?.toDouble() ?? 0,
-                                title: 'غائبون (${((stats.absentStudents ?? 0) / stats.totalStudents * 100).toStringAsFixed(1)}%)',
+                                title: 'غائبون (${((stats.absentStudents ?? 0) / (stats.totalStudents != 0 ? stats.totalStudents : 1) * 100).toStringAsFixed(1)}%)',
                                 color: Colors.red,
                                 radius: 100,
-                                titleStyle: TextStyle(fontSize: 14, color: Colors.white),
+                                titleStyle: TextStyle(fontSize: 16, color: Colors.white),
                               ),
                             ],
                             sectionsSpace: 2,
@@ -291,6 +327,7 @@ class StatsScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 24),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Column(
@@ -328,16 +365,49 @@ class StatsScreen extends StatelessWidget {
                                         bottomTitles: AxisTitles(
                                           sideTitles: SideTitles(
                                             showTitles: true,
+                                            reservedSize: 60, // زيادة المساحة المحجوزة للعناوين السفلية
                                             getTitlesWidget: (double value, TitleMeta meta) {
-                                              return Text('الصف ${value.toInt()}');
+                                              String gradeFr;
+                                              switch (value.toInt().toString()) {
+                                                case '1':
+                                                  gradeFr = 'Première';
+                                                  break;
+                                                case '2':
+                                                  gradeFr = 'Deuxième';
+                                                  break;
+                                                case '3':
+                                                  gradeFr = 'Troisième';
+                                                  break;
+                                                case '4':
+                                                  gradeFr = 'Quatrième';
+                                                  break;
+                                                case '5':
+                                                  gradeFr = 'Cinquième';
+                                                  break;
+                                                case '6':
+                                                  gradeFr = 'Sixième';
+                                                  break;
+                                                default:
+                                                  gradeFr = 'Classe ${value.toInt()}';
+                                              }
+                                              return Padding(
+                                                padding: const EdgeInsets.only(top: 8.0),
+                                                child: Column(
+                                                  children: [
+                                                    Text('الصف ${value.toInt()}', style: TextStyle(fontSize: 14)),
+                                                    Text(gradeFr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                                  ],
+                                                ),
+                                              );
                                             },
                                           ),
                                         ),
                                         leftTitles: AxisTitles(
                                           sideTitles: SideTitles(
                                             showTitles: true,
+                                            reservedSize: 40,
                                             getTitlesWidget: (double value, TitleMeta meta) {
-                                              return Text(value.toInt().toString());
+                                              return Text(value.toInt().toString(), style: TextStyle(fontSize: 14));
                                             },
                                           ),
                                         ),
@@ -373,34 +443,93 @@ class StatsScreen extends StatelessWidget {
                                       PieChart(
                                         PieChartData(
                                           sections: stats.studentsPerGrade.entries.map((entry) {
+                                            String gradeFr;
+                                            switch (entry.key) {
+                                              case '1':
+                                                gradeFr = 'Première';
+                                                break;
+                                              case '2':
+                                                gradeFr = 'Deuxième';
+                                                break;
+                                              case '3':
+                                                gradeFr = 'Troisième';
+                                                break;
+                                              case '4':
+                                                gradeFr = 'Quatrième';
+                                                break;
+                                              case '5':
+                                                gradeFr = 'Cinquième';
+                                                break;
+                                              case '6':
+                                                gradeFr = 'Sixième';
+                                                break;
+                                              default:
+                                                gradeFr = 'Classe ${entry.key}';
+                                            }
                                             return PieChartSectionData(
                                               value: entry.value.toDouble(),
-                                              title: 'الصف ${entry.key} (${((entry.value) / stats.totalStudents * 100).toStringAsFixed(1)}%)',
+                                              title: 'الصف ${entry.key}\n$gradeFr\n(${((entry.value) / (stats.totalStudents != 0 ? stats.totalStudents : 1) * 100).toStringAsFixed(1)}%)',
                                               color: Colors.primaries[entry.key.hashCode % Colors.primaries.length],
                                               radius: 100,
-                                              titleStyle: TextStyle(fontSize: 12, color: Colors.white),
+                                              titleStyle: TextStyle(fontSize: 14, color: Colors.white),
                                             );
                                           }).toList(),
+                                          sectionsSpace: 2,
+                                          centerSpaceRadius: 40,
                                         ),
                                       ),
                                       Positioned(
                                         bottom: 16,
                                         left: 16,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: stats.studentsPerGrade.entries.map((entry) {
-                                            return Row(
-                                              children: [
-                                                Container(
-                                                  width: 12,
-                                                  height: 12,
-                                                  color: Colors.primaries[entry.key.hashCode % Colors.primaries.length],
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: stats.studentsPerGrade.entries.map((entry) {
+                                              String gradeFr;
+                                              switch (entry.key) {
+                                                case '1':
+                                                  gradeFr = 'Première';
+                                                  break;
+                                                case '2':
+                                                  gradeFr = 'Deuxième';
+                                                  break;
+                                                case '3':
+                                                  gradeFr = 'Troisième';
+                                                  break;
+                                                case '4':
+                                                  gradeFr = 'Quatrième';
+                                                  break;
+                                                case '5':
+                                                  gradeFr = 'Cinquième';
+                                                  break;
+                                                case '6':
+                                                  gradeFr = 'Sixième';
+                                                  break;
+                                                default:
+                                                  gradeFr = 'Classe ${entry.key}';
+                                              }
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 4.0),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      width: 12,
+                                                      height: 12,
+                                                      color: Colors.primaries[entry.key.hashCode % Colors.primaries.length],
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text('الصف ${entry.key}', style: TextStyle(fontSize: 14)),
+                                                        Text(gradeFr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                                      ],
+                                                    ),
+                                                  ],
                                                 ),
-                                                SizedBox(width: 8),
-                                                Text('الصف ${entry.key}'),
-                                              ],
-                                            );
-                                          }).toList(),
+                                              );
+                                            }).toList(),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -417,7 +546,7 @@ class StatsScreen extends StatelessWidget {
                 ),
               );
             } else if (state is StatsError) {
-              return Center(child: Text(state.message));
+              return Center(child: Text(state.message, style: TextStyle(fontSize: 18)));
             }
             return Container();
           },
@@ -427,12 +556,15 @@ class StatsScreen extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(String titleAr, String titleFr) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(titleAr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-        Text(titleFr, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titleAr, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          Text(titleFr, style: TextStyle(fontSize: 20, color: Colors.grey[600])),
+        ],
+      ),
     );
   }
 }

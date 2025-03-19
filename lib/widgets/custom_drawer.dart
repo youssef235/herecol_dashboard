@@ -188,23 +188,31 @@ class CustomDrawer extends StatelessWidget {
                                     Icon(groupIcon, color: Colors.blue[700], size: 24),
                                     const SizedBox(width: 12),
                                     Expanded(
-                                      child: Text(
-                                        groupTitle.split('/')[0].trim(),
-                                        style: GoogleFonts.cairo(
-                                          color: Colors.black87,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            groupTitle.split('/')[1].trim(), // الفرنسية أولاً
+                                            style: GoogleFonts.cairo(
+                                              color: Colors.blue[800], // لون أغمق للفرنسية
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold, // سمك موحد
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            groupTitle.split('/')[0].trim(), // العربية ثانياً
+                                            style: GoogleFonts.cairo(
+                                              color: Colors.blue[600], // لون أفتح للعربية
+                                              fontSize: 16, // نفس الحجم للوضوح
+                                              fontWeight: FontWeight.bold, // سمك موحد
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
-                                ),
-                                Text(
-                                  groupTitle.split('/')[1].trim(),
-                                  style: GoogleFonts.cairo(
-                                    color: Colors.black54,
-                                    fontSize: 12,
-                                  ),
                                 ),
                               ],
                             ),
@@ -388,17 +396,18 @@ class CustomDrawer extends StatelessWidget {
               Text(
                 titleFrench,
                 style: GoogleFonts.cairo(
-                  color: Colors.black87,
+                  color: Colors.blue[800], // لون أغمق قليلاً للفرنسية
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w600, // نفس السمك لكلا اللغتين
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
                 titleArabic,
                 style: GoogleFonts.cairo(
-                  color: Colors.black54,
-                  fontSize: 12,
+                  color: Colors.blue[600], // لون أفتح قليلاً للعربية
+                  fontSize: 14, // نفس الحجم لتوحيد الوضوح
+                  fontWeight: FontWeight.w600, // نفس السمك لكلا اللغتين
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

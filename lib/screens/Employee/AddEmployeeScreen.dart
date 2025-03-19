@@ -16,7 +16,7 @@ import 'package:school_management_dashboard/firebase_services/school_info_fireba
 import 'package:school_management_dashboard/models/employee_model.dart';
 import '../../cubit/auth/auth_state.dart';
 import '../../firebase_services/SalaryFirebaseServices.dart';
-
+import 'package:google_fonts/google_fonts.dart';
 class AddEmployeeScreen extends StatelessWidget {
   final String? schoolId;
 
@@ -667,33 +667,124 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
   }
 
   Widget _buildPermissionsSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('الصلاحيات / Permissions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        ...availablePermissions.entries.map((entry) {
-          return CheckboxListTile(
-            title: Text(entry.value),
-            value: _selectedPermissions.contains(entry.key),
-            onChanged: (bool? selected) {
-              setState(() {
-                if (selected != null) {
-                  if (selected) {
-                    _selectedPermissions.add(entry.key);
-                  } else {
-                    _selectedPermissions.remove(entry.key);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            blurRadius: 10,
+            spreadRadius: 2,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // العنوان
+          Text(
+            'الصلاحيات / Permissions',
+            style: GoogleFonts.cairo(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue[900],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // خيار "تحديد الكل"
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue[700]!, Colors.blue[500]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: CheckboxListTile(
+              title: Text(
+                'تحديد الكل / Sélectionner tout',
+                style: GoogleFonts.cairo(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              value: _selectedPermissions.length == availablePermissions.length,
+              activeColor: Colors.white,
+              checkColor: Colors.blue[900],
+              onChanged: (bool? selected) {
+                setState(() {
+                  if (selected != null) {
+                    if (selected) {
+                      _selectedPermissions.clear();
+                      _selectedPermissions.addAll(availablePermissions.keys);
+                    } else {
+                      _selectedPermissions.clear();
+                    }
                   }
-                }
-              });
-            },
-          );
-        }).toList(),
-      ],
+                });
+              },
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const Divider(color: Colors.grey, height: 20),
+          // قائمة الصلاحيات الفردية
+          ...availablePermissions.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: _selectedPermissions.contains(entry.key)
+                      ? Colors.blue[50]
+                      : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _selectedPermissions.contains(entry.key)
+                        ? Colors.blue[700]!
+                        : Colors.grey[300]!,
+                    width: 1,
+                  ),
+                ),
+                child: CheckboxListTile(
+                  title: Text(
+                    entry.value,
+                    style: GoogleFonts.cairo(
+                      color: Colors.black87,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  value: _selectedPermissions.contains(entry.key),
+                  activeColor: Colors.blue[700],
+                  checkColor: Colors.white,
+                  onChanged: (bool? selected) {
+                    setState(() {
+                      if (selected != null) {
+                        if (selected) {
+                          _selectedPermissions.add(entry.key);
+                        } else {
+                          _selectedPermissions.remove(entry.key);
+                        }
+                      }
+                    });
+                  },
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            );
+          }).toList(),
+        ],
+      ),
     );
-  }
-
-  Widget _buildSalaryCategoryDropdown() {
+  }  Widget _buildSalaryCategoryDropdown() {
     return BlocBuilder<SalaryCubit, SalaryState>(
       builder: (context, state) {
         if (state is SalaryCategoriesLoaded) {

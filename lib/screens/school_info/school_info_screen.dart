@@ -8,6 +8,7 @@ import '../../cubit/school_info/school_info_state.dart';
 import '../../cubit/auth/auth_cubit.dart';
 import '../../cubit/auth/auth_state.dart';
 import '../../models/school_info_model.dart';
+import 'dart:developer' as developer;
 
 class SchoolInfoScreen extends StatefulWidget {
   @override
@@ -64,33 +65,32 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
     super.initState();
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
+      developer.log('InitState: Role=${authState.role}, UID=${authState.uid}, SchoolId=${authState.schoolId}');
       if (authState.role == 'school') {
-        // إذا كان المستخدم مدرسة، استخدم uid كـ schoolId
         selectedSchoolId = authState.uid;
-        context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, authState.role);
+        context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
       } else if (authState.role == 'employee') {
-        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
         selectedSchoolId = authState.schoolId;
         if (selectedSchoolId != null) {
           context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, 'school');
         }
       } else if (authState.role == 'admin') {
-        // إذا كان المستخدم admin، جلب جميع المدارس
         context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
       }
-      // تعبئة حقل البريد الإلكتروني الحالي
       _currentEmailController.text = authState.email ?? '';
+    } else {
+      developer.log('InitState: No authenticated user');
     }
   }
 
   void _onSchoolSelected(String? schoolId) {
-    if (schoolId == null) return;
+    if (schoolId == null || schools.isEmpty) return;
 
     setState(() {
       selectedSchoolId = schoolId;
       selectedSchool = schools.firstWhere((school) => school.schoolId == schoolId);
 
-      // Populate the controllers with selected school data
+      developer.log('Selected school: ${selectedSchool!.schoolName}');
       _schoolNameArController.text = selectedSchool!.schoolName['ar'] ?? '';
       _schoolNameFrController.text = selectedSchool!.schoolName['fr'] ?? '';
       _cityArController.text = selectedSchool!.city['ar'] ?? '';
@@ -108,7 +108,6 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
       _logoUrl = selectedSchool!.logoUrl;
       _principalSignatureUrl = selectedSchool!.principalSignatureUrl;
 
-      // Populate classes
       _classes.clear();
       final arClasses = selectedSchool!.classes['ar'] ?? [];
       final frClasses = selectedSchool!.classes['fr'] ?? [];
@@ -123,11 +122,9 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
         });
       }
 
-      // Populate categories
       _categoriesAr = List<String>.from(selectedSchool!.categories['ar'] ?? []);
       _categoriesFr = List<String>.from(selectedSchool!.categories['fr'] ?? []);
 
-      // Populate mainSections and subSections
       _mainSections.clear();
       final arMainSections = selectedSchool!.mainSections['ar'] ?? [];
       final frMainSections = selectedSchool!.mainSections['fr'] ?? [];
@@ -493,12 +490,14 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                   if (state is SchoolsLoaded) {
                     setState(() {
                       schools = state.schools;
-                      if (authState is AuthAuthenticated && selectedSchoolId == null && schools.isNotEmpty) {
+                      developer.log('Schools loaded: ${schools.length}');
+                      if (authState is AuthAuthenticated && schools.isNotEmpty) {
+                        // استدعاء _onSchoolSelected دائمًا لضمان تحديث الواجهة
                         if (authState.role == 'school') {
                           _onSchoolSelected(authState.uid);
                         } else if (authState.role == 'employee') {
                           _onSchoolSelected(authState.schoolId);
-                        } else if (authState.role == 'admin' && schools.isNotEmpty) {
+                        } else if (authState.role == 'admin' && selectedSchoolId == null) {
                           _onSchoolSelected(schools.first.schoolId);
                         }
                       }
@@ -507,21 +506,21 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text("تم حفظ معلومات المدرسة / Les informations de l'école ont été enregistrées")),
                     );
-                    final authState = context.read<AuthCubit>().state;
-                    if (authState is AuthAuthenticated) {
-                      context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
-                    }
                   } else if (state is SchoolError) {
+                    developer.log('School error: ${state.message}');
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
                   }
                 },
                 child: BlocBuilder<SchoolCubit, SchoolState>(
                   builder: (context, state) {
-                    if (state is SchoolLoading) {
+                    developer.log('BlocBuilder state: ${state.runtimeType}');
+                    if (state is SchoolLoading || state is SchoolsLoading) {
                       return Center(child: CircularProgressIndicator());
                     } else if (state is SchoolsLoaded) {
                       schools = state.schools;
-
+                      if (schools.isEmpty) {
+                        return Center(child: Text("لا توجد بيانات للمدارس / Aucune donnée pour les écoles"));
+                      }
                       return Form(
                         key: _formKey,
                         child: Column(
@@ -573,7 +572,7 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ],
                               ),
                               SizedBox(height: 24),
-                            ] else if (selectedSchoolId != null) ...[
+                            ] else if (selectedSchoolId != null && schools.isNotEmpty) ...[
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                                 child: Text(
@@ -583,8 +582,7 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                               ),
                               SizedBox(height: 16),
                             ],
-                            if (selectedSchoolId != null) ...[
-                              // Shared Information Section
+                            if (selectedSchoolId != null && schools.isNotEmpty) ...[
                               Container(
                                 padding: EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -613,7 +611,6 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ),
                               ),
                               SizedBox(height: 24),
-                              // Language Sections
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -679,7 +676,6 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ],
                               ),
                               SizedBox(height: 24),
-                              // Classes and Sections Section
                               Container(
                                 padding: EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -850,7 +846,6 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ),
                               ),
                               SizedBox(height: 24),
-                              // Main Sections and Subsections Section
                               Container(
                                 padding: EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -1021,7 +1016,6 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ),
                               ),
                               SizedBox(height: 24),
-                              // Categories Section
                               Container(
                                 padding: EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -1145,6 +1139,8 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                           ],
                         ),
                       );
+                    } else if (state is SchoolError) {
+                      return Center(child: Text(state.message));
                     } else {
                       return Center(child: Text("لم يتم العثور على مدرسة / Aucune école trouvée"));
                     }
