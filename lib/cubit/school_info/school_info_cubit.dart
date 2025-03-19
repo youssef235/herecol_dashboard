@@ -71,4 +71,6 @@ class SchoolCubit extends Cubit<SchoolState> {
       emit(SchoolError("خطأ في تحميل المدارس: $e"));
     }
   }
+
+
 }

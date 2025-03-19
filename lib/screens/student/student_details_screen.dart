@@ -310,6 +310,8 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
                                     classes: {'ar': [], 'fr': []},
                                     sections: {'ar': {}, 'fr': {}},
                                     categories: {'ar': [], 'fr': []},
+                                    mainSections: {'ar': [], 'fr': []}, // إضافة mainSections
+                                    subSections: {'ar': {}, 'fr': {}},   // إضافة subSections
                                     logoUrl: null,
                                     principalName: {'ar': '', 'fr': ''},
                                     principalSignatureUrl: null,

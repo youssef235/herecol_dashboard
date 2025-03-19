@@ -3,12 +3,15 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../cubit/auth/auth_cubit.dart';
+import '../../cubit/auth/auth_state.dart';
 import '../../cubit/school_info/school_info_cubit.dart';
 import '../../cubit/school_info/school_info_state.dart';
 import '../../cubit/student/student_cubit.dart';
 import '../../cubit/student/student_state.dart';
 import '../../models/school_info_model.dart';
 import '../../models/student_model.dart';
+import '../../models/fee_structure_model.dart';
 
 class AddStudentScreen extends StatefulWidget {
   final String role;
@@ -39,8 +42,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _birthDateController = TextEditingController();
-  final _feesDueController = TextEditingController();
-  final _feesPaidController = TextEditingController();
   final _ministryFileNumberController = TextEditingController();
 
   String? _profileImageUrl;
@@ -54,6 +55,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String? _selectedAcademicYear;
   String? _selectedCategoryAr;
   String? _selectedCategoryFr;
+  String? _selectedFeeStructureId;
 
   final List<String> _academicYears = [
     '2023-2024',
@@ -73,14 +75,28 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.role == 'admin') {
-      context.read<SchoolCubit>().fetchSchools(widget.uid, widget.role);
-    } else {
-      _schoolId = widget.uid;
-      context.read<SchoolCubit>().fetchSchools(widget.uid, widget.role);
+    final authState = context.read<AuthCubit>().state;
+
+    if (authState is AuthAuthenticated) {
+      if (widget.role == 'admin') {
+        // إذا كان المستخدم admin، جلب جميع المدارس
+        context.read<SchoolCubit>().fetchSchools(widget.uid, widget.role);
+        _schoolId = null; // لا حاجة لتحديد مدرسة معينة للـ admin هنا
+      } else if (widget.role == 'school') {
+        // إذا كان المستخدم مدرسة، استخدم uid كـ schoolId
+        _schoolId = widget.uid;
+        context.read<SchoolCubit>().fetchSchools(_schoolId!, widget.role);
+      } else if (widget.role == 'employee') {
+        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
+        _schoolId = authState.schoolId;
+        if (_schoolId != null) {
+          context.read<SchoolCubit>().fetchSchools(_schoolId!, 'school');
+        }
+      }
+      // جلب هياكل الرسوم بناءً على _schoolId أو uid كبديل
+      context.read<StudentCubit>().fetchFeeStructures(_schoolId ?? widget.uid);
     }
   }
-
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
@@ -116,11 +132,21 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       }
       if (_selectedGradeAr == null ||
           _selectedSectionAr == null ||
-          _selectedAcademicYear == null) {
+          _selectedAcademicYear == null ||
+          _selectedFeeStructureId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يرجى اختيار الصف والشعبة والعام الدراسي')),
+          const SnackBar(content: Text('يرجى اختيار الصف والشعبة والعام الدراسي وهيكل المصاريف')),
         );
         return;
+      }
+
+      double totalFeesDue = 0.0;
+      final feeState = context.read<StudentCubit>().state;
+      if (feeState is FeeStructuresLoaded) {
+        final selectedFeeStructure = feeState.feeStructures
+            .firstWhere((fs) => fs.id == _selectedFeeStructureId);
+        totalFeesDue =
+            selectedFeeStructure.installments.fold(0.0, (sum, i) => sum + i.amount);
       }
 
       final student = Student(
@@ -146,8 +172,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         birthPlaceAr: _birthPlaceArController.text,
         birthPlaceFr: _birthPlaceFrController.text,
         profileImage: _profileImageUrl,
-        feesDue: double.tryParse(_feesDueController.text) ?? 0.0,
-        feesPaid: double.tryParse(_feesPaidController.text) ?? 0.0,
+        feesDue: totalFeesDue,
+        feesPaid: 0.0,
         ministryFileNumber: _ministryFileNumberController.text,
         genderAr: _selectedGenderAr,
         genderFr: _selectedGenderFr,
@@ -239,7 +265,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       builder: (context, schoolState) {
                         if (schoolState is SchoolsLoaded) {
                           final school = schoolState.schools.firstWhere(
-                                (s) => s.schoolId ==
+                                (s) =>
+                            s.schoolId ==
                                 (widget.role == 'admin' ? _schoolId : widget.uid),
                             orElse: () => schoolState.schools.isNotEmpty
                                 ? schoolState.schools.first
@@ -257,7 +284,9 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                               address: {'ar': '', 'fr': ''},
                               classes: {'ar': [], 'fr': []},
                               sections: {'ar': {}, 'fr': {}},
-                              categories: {'ar': [], 'fr': []},
+                              categories: {'ar Groot': [], 'fr': []},
+                              mainSections: {'ar': [], 'fr': []},
+                              subSections: {'ar': {}, 'fr': {}},
                               logoUrl: null,
                               principalName: {'ar': '', 'fr': ''},
                               principalSignatureUrl: null,
@@ -267,10 +296,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
 
                           final classesAr = school.classes['ar'] ?? [];
                           final classesFr = school.classes['fr'] ?? [];
-                          final sectionsAr = school.sections['ar'] ?? {};
-                          final sectionsFr = school.sections['fr'] ?? {};
-                          final categoriesAr = school.categories['ar'] ?? [];
-                          final categoriesFr = school.categories['fr'] ?? [];
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,6 +331,9 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                       _selectedGradeFr = null;
                                       _selectedSectionAr = null;
                                       _selectedSectionFr = null;
+                                      context
+                                          .read<StudentCubit>()
+                                          .fetchFeeStructures(_schoolId ?? widget.uid);
                                     });
                                   },
                                   validator: (value) =>
@@ -315,8 +343,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                               ],
                               _buildTextField(
                                   label: 'رقم الهاتف / Numéro de téléphone',
-                                  controller: _phoneController
-                              , isRequired: false),
+                                  controller: _phoneController,
+                                  isRequired: false),
                               const SizedBox(height: 12),
                               _buildTextField(
                                   label: 'البريد الإلكتروني / E-mail',
@@ -366,23 +394,64 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                 value == null ? 'مطلوب' : null,
                               ),
                               const SizedBox(height: 12),
-                              _buildTextField(
-                                label: 'المصاريف المستحقة / Frais dus',
-                                controller: _feesDueController,
-                                keyboardType: TextInputType.number,
+                              DropdownButtonFormField<String>(
+                                decoration: _buildInputDecoration('الصف'),
+                                value: _selectedGradeAr,
+                                items: classesAr.map((grade) {
+                                  return DropdownMenuItem(
+                                      value: grade, child: Text(grade));
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedGradeAr = value;
+                                    final index = classesAr.indexOf(value!);
+                                    _selectedGradeFr = classesFr[index];
+                                    _selectedSectionAr = null;
+                                    _selectedSectionFr = null;
+                                  });
+                                },
+                                validator: (value) =>
+                                value == null ? 'مطلوب' : null,
                               ),
                               const SizedBox(height: 12),
-                              _buildTextField(
-                                label: 'المصاريف المدفوعة / Frais payés',
-                                controller: _feesPaidController,
-                                keyboardType: TextInputType.number,
+                              BlocBuilder<StudentCubit, StudentState>(
+                                builder: (context, state) {
+                                  if (state is FeeStructuresLoaded &&
+                                      _selectedGradeAr != null) {
+                                    final feeStructures = state.feeStructures
+                                        .where((fs) => fs.gradeAr == _selectedGradeAr)
+                                        .toList();
+                                    return DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration(
+                                          'هيكل المصاريف / Structure des frais'),
+                                      value: _selectedFeeStructureId,
+                                      items: feeStructures.map((fs) {
+                                        final totalFees = fs.installments
+                                            .fold(0.0, (sum, i) => sum + i.amount);
+                                        return DropdownMenuItem(
+                                          value: fs.id,
+                                          child: Text(
+                                              '${fs.gradeAr} - المجموع: $totalFees'),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedFeeStructureId = value;
+                                        });
+                                      },
+                                      validator: (value) =>
+                                      value == null ? 'مطلوب' : null,
+                                    );
+                                  }
+                                  return const SizedBox();
+                                },
                               ),
                               const SizedBox(height: 12),
                               _buildTextField(
                                 label:
                                 'رقم الملف في الوزارة / Numéro de dossier au ministère',
                                 controller: _ministryFileNumberController,
-                                  isRequired: false
+                                isRequired: false,
                               ),
                             ],
                           );
@@ -414,16 +483,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                             builder: (context, schoolState) {
                               if (schoolState is SchoolsLoaded) {
                                 final school = schoolState.schools.firstWhere(
-                                      (s) => s.schoolId ==
+                                      (s) =>
+                                  s.schoolId ==
                                       (widget.role == 'admin'
                                           ? _schoolId
                                           : widget.uid),
                                   orElse: () => schoolState.schools.first,
                                 );
-                                final classesFr = school.classes['fr'] ?? [];
                                 final sectionsFr = school.sections['fr'] ?? {};
-                                final categoriesFr =
-                                    school.categories['fr'] ?? [];
+                                final categoriesFr = school.categories['fr'] ?? [];
 
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,28 +513,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                         label: 'Adresse',
                                         controller: _addressFrController),
                                     const SizedBox(height: 12),
-                                    DropdownButtonFormField<String>(
-                                      decoration:
-                                      _buildInputDecoration('Classe'),
-                                      value: _selectedGradeFr,
-                                      items: classesFr.map((grade) {
-                                        return DropdownMenuItem(
-                                            value: grade, child: Text(grade));
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedGradeFr = value;
-                                          final index = classesFr.indexOf(value!);
-                                          _selectedGradeAr =
-                                          school.classes['ar']![index];
-                                          _selectedSectionFr = null;
-                                          _selectedSectionAr = null;
-                                        });
-                                      },
-                                      validator: (value) =>
-                                      value == null ? 'Requis' : null,
-                                    ),
-                                    const SizedBox(height: 12),
                                     if (_selectedGradeFr != null &&
                                         sectionsFr[_selectedGradeFr] != null)
                                       DropdownButtonFormField<String>(
@@ -486,8 +532,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                             _selectedGradeFr]!
                                                 .indexOf(value!);
                                             _selectedSectionAr = school
-                                                .sections['ar']![
-                                            _selectedGradeAr]![index];
+                                                .sections['ar']![_selectedGradeAr]![
+                                            index];
                                           });
                                         },
                                         validator: (value) =>
@@ -559,16 +605,15 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                             builder: (context, schoolState) {
                               if (schoolState is SchoolsLoaded) {
                                 final school = schoolState.schools.firstWhere(
-                                      (s) => s.schoolId ==
+                                      (s) =>
+                                  s.schoolId ==
                                       (widget.role == 'admin'
                                           ? _schoolId
                                           : widget.uid),
                                   orElse: () => schoolState.schools.first,
                                 );
-                                final classesAr = school.classes['ar'] ?? [];
                                 final sectionsAr = school.sections['ar'] ?? {};
-                                final categoriesAr =
-                                    school.categories['ar'] ?? [];
+                                final categoriesAr = school.categories['ar'] ?? [];
 
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,27 +639,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                         controller: _addressArController,
                                         textDirection: TextDirection.rtl),
                                     const SizedBox(height: 12),
-                                    DropdownButtonFormField<String>(
-                                      decoration: _buildInputDecoration('الصف'),
-                                      value: _selectedGradeAr,
-                                      items: classesAr.map((grade) {
-                                        return DropdownMenuItem(
-                                            value: grade, child: Text(grade));
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedGradeAr = value;
-                                          final index = classesAr.indexOf(value!);
-                                          _selectedGradeFr =
-                                          school.classes['fr']![index];
-                                          _selectedSectionAr = null;
-                                          _selectedSectionFr = null;
-                                        });
-                                      },
-                                      validator: (value) =>
-                                      value == null ? 'مطلوب' : null,
-                                    ),
-                                    const SizedBox(height: 12),
                                     if (_selectedGradeAr != null &&
                                         sectionsAr[_selectedGradeAr] != null)
                                       DropdownButtonFormField<String>(
@@ -634,8 +658,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                                             _selectedGradeAr]!
                                                 .indexOf(value!);
                                             _selectedSectionFr = school
-                                                .sections['fr']![
-                                            _selectedGradeFr]![index];
+                                                .sections['fr']![_selectedGradeFr]![
+                                            index];
                                           });
                                         },
                                         validator: (value) =>
@@ -807,8 +831,6 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _birthDateController.dispose();
-    _feesDueController.dispose();
-    _feesPaidController.dispose();
     _ministryFileNumberController.dispose();
     super.dispose();
   }

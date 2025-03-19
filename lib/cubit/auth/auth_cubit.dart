@@ -19,32 +19,63 @@ class AuthCubit extends Cubit<AuthState> {
         password: password,
       );
 
-      String role = email == superAdminEmail ? 'admin' : 'school';
-      final userDoc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
+      final uid = userCredential.user!.uid;
+      final userDoc = await _firestore.collection('users').doc(uid).get();
 
-      if (userDoc.exists) {
-        emit(AuthAuthenticated(
-          role: role,
-          uid: userCredential.user!.uid,
-          email: userCredential.user!.email,
-        ));
+      String role;
+      String? schoolId;
+      List<String> permissions = [];
+
+      if (email == superAdminEmail) {
+        role = 'admin'; // السوبر أدمن
+        schoolId = null; // لا حاجة لـ schoolId للسوبر أدمن
+        permissions = []; // السوبر أدمن يرى كل شيء، لا حاجة لصلاحيات محددة
+      } else if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        role = userData['role'] ?? 'school';
+        schoolId = userData['schoolId'];
+
+        // استرجاع الصلاحيات من حقل permissions في مجموعة users
+        if (role == 'employee' && schoolId != null) {
+          permissions = List<String>.from(userData['permissions'] ?? []);
+          // إذا لم تكن هناك صلاحيات في users، يمكننا التحقق من employees كخيار احتياطي
+          if (permissions.isEmpty) {
+            final employeeDoc = await _firestore
+                .collection('schools')
+                .doc(schoolId)
+                .collection('employees')
+                .doc(uid)
+                .get();
+            if (employeeDoc.exists) {
+              permissions = List<String>.from(employeeDoc.data()?['permissions'] ?? []);
+            }
+          }
+        } else if (role == 'school') {
+          permissions = []; // مدير المدرسة يرى كل شيء، لا حاجة لصلاحيات محددة
+        }
       } else {
-        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        // إذا لم يكن المستخدم موجودًا، يتم تسجيله كمدير مدرسة افتراضيًا
+        role = 'school';
+        schoolId = uid;
+        permissions = []; // لا صلاحيات محددة لمدير المدرسة الجديد
+        await _firestore.collection('users').doc(uid).set({
           'email': email,
           'role': role,
-          'schoolId': role == 'school' ? userCredential.user!.uid : null,
+          'schoolId': schoolId,
         });
-        emit(AuthAuthenticated(
-          role: role,
-          uid: userCredential.user!.uid,
-          email: email,
-        ));
       }
+
+      emit(AuthAuthenticated(
+        role: role,
+        uid: uid,
+        email: email,
+        schoolId: schoolId,
+        permissions: permissions,
+      ));
     } on FirebaseAuthException catch (e) {
       emit(AuthError(e.message ?? "حدث خطأ أثناء تسجيل الدخول"));
     }
-  }
-
+  }  // تسجيل حساب جديد (للمدارس أو السوبر أدمن)
   Future<void> signUp(String email, String password, Schoolinfo schoolInfo) async {
     emit(AuthLoading());
     try {
@@ -72,7 +103,13 @@ class AuthCubit extends Cubit<AuthState> {
         print("School data saved in 'schools' collection");
       }
 
-      emit(AuthAuthenticated(role: role, uid: uid, email: email));
+      emit(AuthAuthenticated(
+        role: role,
+        uid: uid,
+        email: email,
+        schoolId: role == 'school' ? uid : null,
+        permissions: [], // لا صلاحيات محددة للسوبر أدمن أو مدير المدرسة
+      ));
       print("SignUp completed successfully");
     } on FirebaseAuthException catch (e) {
       print("FirebaseAuthException: ${e.message}");
@@ -83,7 +120,7 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  // دالة جديدة لإضافة مدرسة دون تسجيل الدخول
+  // إضافة مدرسة دون تسجيل الدخول (للسوبر أدمن)
   Future<void> addSchoolWithoutLogin(String email, String password, Schoolinfo schoolInfo) async {
     emit(AuthLoading());
     try {
@@ -108,7 +145,6 @@ class AuthCubit extends Cubit<AuthState> {
       await _firestore.collection('schools').doc(uid).set(schoolInfo.toMap());
       print("School data saved in 'schools' collection");
 
-      // لا نُصدر حالة AuthAuthenticated، فقط ننهي العملية
       emit(state); // الحفاظ على الحالة الحالية
       print("School added successfully without login");
     } on FirebaseAuthException catch (e) {
@@ -120,11 +156,13 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  // تسجيل الخروج
   Future<void> logout() async {
     await _firebaseAuth.signOut();
     emit(AuthUnauthenticated());
   }
 
+  // تحديث البريد الإلكتروني
   Future<void> updateEmail({
     required String currentEmail,
     required String currentPassword,
@@ -145,6 +183,8 @@ class AuthCubit extends Cubit<AuthState> {
         role: newEmail == superAdminEmail ? 'admin' : 'school',
         uid: user.uid,
         email: newEmail,
+        schoolId: newEmail == superAdminEmail ? null : user.uid,
+        permissions: [], // لا تغيير في الصلاحيات عند تحديث البريد
       ));
     } on FirebaseAuthException catch (e) {
       emit(AuthError(e.message ?? "حدث خطأ أثناء تحديث البريد الإلكتروني"));
@@ -153,6 +193,7 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  // تحديث كلمة المرور
   Future<void> updatePassword({
     required String currentPassword,
     required String newPassword,
@@ -171,6 +212,8 @@ class AuthCubit extends Cubit<AuthState> {
         role: user.email == superAdminEmail ? 'admin' : 'school',
         uid: user.uid,
         email: user.email,
+        schoolId: user.email == superAdminEmail ? null : user.uid,
+        permissions: [], // لا تغيير في الصلاحيات عند تحديث كلمة المرور
       ));
     } on FirebaseAuthException catch (e) {
       emit(AuthError(e.message ?? "حدث خطأ أثناء تحديث كلمة المرور"));

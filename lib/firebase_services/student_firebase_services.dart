@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:school_management_dashboard/models/fee_structure_model.dart';
+import '../models/Payment.dart';
 import '../models/student_model.dart';
 
 class StudentFirebaseServices {
@@ -40,16 +42,39 @@ class StudentFirebaseServices {
     }
   }
 
-  // دالة جديدة لتدفق الطلاب في الوقت الفعلي
   Stream<List<Student>> streamSchoolStudents(String schoolId) {
     return _firestore
         .collection('schools')
         .doc(schoolId)
         .collection('students')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-      return Student.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
-    }).toList());
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return Student.fromFirestore(doc.data(), doc.id);
+      }).toList();
+    });
+  }
+
+  Stream<List<Student>> streamAllStudents() {
+    return _firestore.collectionGroup('students').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return Student.fromFirestore(doc.data(), doc.id);
+      }).toList();
+    });
+  }
+
+  Future<FeeStructure?> getFeeStructureForStudent(String schoolId, String gradeAr) async {
+    final snapshot = await _firestore
+        .collection('schools')
+        .doc(schoolId)
+        .collection('feeStructures')
+        .where('gradeAr', isEqualTo: gradeAr)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) {
+      return FeeStructure.fromFirestore(snapshot.docs.first.data(), snapshot.docs.first.id);
+    }
+    return null;
   }
 
   Future<void> updateStudentAttendance({
@@ -105,7 +130,8 @@ class StudentFirebaseServices {
           .doc(studentId)
           .get();
       if (doc.exists) {
-        return Student.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
+        final feeStructure = await getFeeStructureForStudent(schoolId, doc.data()!['gradeAr']);
+        return Student.fromFirestore(doc.data() as Map<String, dynamic>, doc.id, feeStructure);
       } else {
         throw Exception("الطالب غير موجود");
       }
@@ -144,6 +170,76 @@ class StudentFirebaseServices {
           .update(student.toFirestore());
     } catch (e) {
       throw Exception("خطأ في تحديث بيانات الطالب: $e");
+    }
+  }
+
+  Future<void> addPayment({
+    required String schoolId,
+    required String studentId,
+    required Payment payment,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('students')
+          .doc(studentId)
+          .collection('payments')
+          .doc(payment.id)
+          .set(payment.toFirestore());
+    } catch (e) {
+      throw Exception("خطأ في إضافة الدفع: $e");
+    }
+  }
+
+  Future<List<Payment>> getPayments({
+    required String schoolId,
+    required String studentId,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('students')
+          .doc(studentId)
+          .collection('payments')
+          .get();
+      return snapshot.docs.map((doc) {
+        return Payment.fromFirestore(doc.data());
+      }).toList();
+    } catch (e) {
+      throw Exception("خطأ في جلب المدفوعات: $e");
+    }
+  }
+
+  Future<void> addFeeStructure({
+    required String schoolId,
+    required FeeStructure feeStructure,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('feeStructures')
+          .doc(feeStructure.id)
+          .set(feeStructure.toFirestore());
+    } catch (e) {
+      throw Exception("خطأ في إضافة هيكل المصاريف: $e");
+    }
+  }
+
+  Future<List<FeeStructure>> getFeeStructures(String schoolId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('feeStructures')
+          .get();
+      return snapshot.docs.map((doc) {
+        return FeeStructure.fromFirestore(doc.data(), doc.id);
+      }).toList();
+    } catch (e) {
+      throw Exception("خطأ في جلب هياكل المصاريف: $e");
     }
   }
 }

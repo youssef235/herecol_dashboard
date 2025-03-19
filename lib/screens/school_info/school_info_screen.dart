@@ -50,18 +50,36 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
   List<String> _categoriesAr = [];
   List<String> _categoriesFr = [];
 
+  // Classes list
+  final List<Map<String, dynamic>> _classes = [];
+
+  // MainSections and SubSections list
+  final List<Map<String, dynamic>> _mainSections = [];
+
   String? _logoUrl;
   String? _principalSignatureUrl;
-
-  final List<Map<String, dynamic>> _classes = [];
 
   @override
   void initState() {
     super.initState();
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
-      context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
-      _currentEmailController.text = authState.email ?? ''; // Pre-fill current email
+      if (authState.role == 'school') {
+        // إذا كان المستخدم مدرسة، استخدم uid كـ schoolId
+        selectedSchoolId = authState.uid;
+        context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, authState.role);
+      } else if (authState.role == 'employee') {
+        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
+        selectedSchoolId = authState.schoolId;
+        if (selectedSchoolId != null) {
+          context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, 'school');
+        }
+      } else if (authState.role == 'admin') {
+        // إذا كان المستخدم admin، جلب جميع المدارس
+        context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
+      }
+      // تعبئة حقل البريد الإلكتروني الحالي
+      _currentEmailController.text = authState.email ?? '';
     }
   }
 
@@ -108,6 +126,21 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
       // Populate categories
       _categoriesAr = List<String>.from(selectedSchool!.categories['ar'] ?? []);
       _categoriesFr = List<String>.from(selectedSchool!.categories['fr'] ?? []);
+
+      // Populate mainSections and subSections
+      _mainSections.clear();
+      final arMainSections = selectedSchool!.mainSections['ar'] ?? [];
+      final frMainSections = selectedSchool!.mainSections['fr'] ?? [];
+      for (int i = 0; i < arMainSections.length; i++) {
+        _mainSections.add({
+          'mainSectionNameAr': arMainSections[i],
+          'mainSectionNameFr': frMainSections[i],
+          'subSectionControllerAr': TextEditingController(),
+          'subSectionControllerFr': TextEditingController(),
+          'subSectionsAr': List<String>.from(selectedSchool!.subSections['ar']?[arMainSections[i]] ?? []),
+          'subSectionsFr': List<String>.from(selectedSchool!.subSections['fr']?[frMainSections[i]] ?? []),
+        });
+      }
     });
   }
 
@@ -200,6 +233,51 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
     });
   }
 
+  void _addMainSection() {
+    setState(() {
+      _mainSections.add({
+        'mainSectionNameAr': '',
+        'mainSectionNameFr': '',
+        'subSectionControllerAr': TextEditingController(),
+        'subSectionControllerFr': TextEditingController(),
+        'subSectionsAr': <String>[],
+        'subSectionsFr': <String>[],
+      });
+    });
+  }
+
+  void _addSubSection(int sectionIndex, String lang) {
+    final controller = lang == 'ar'
+        ? _mainSections[sectionIndex]['subSectionControllerAr']
+        : _mainSections[sectionIndex]['subSectionControllerFr'];
+    final subSections = lang == 'ar'
+        ? _mainSections[sectionIndex]['subSectionsAr']
+        : _mainSections[sectionIndex]['subSectionsFr'];
+    final subSectionText = controller.text.trim();
+    if (subSectionText.isNotEmpty && !subSections.contains(subSectionText)) {
+      setState(() {
+        subSections.add(subSectionText);
+        controller.clear();
+      });
+    }
+  }
+
+  void _removeMainSection(int index) {
+    setState(() {
+      _mainSections.removeAt(index);
+    });
+  }
+
+  void _removeSubSection(int sectionIndex, String subSection, String lang) {
+    setState(() {
+      if (lang == 'ar') {
+        _mainSections[sectionIndex]['subSectionsAr'].remove(subSection);
+      } else {
+        _mainSections[sectionIndex]['subSectionsFr'].remove(subSection);
+      }
+    });
+  }
+
   void _saveSchool() {
     if (_formKey.currentState!.validate()) {
       if (_classes.isEmpty) {
@@ -219,6 +297,15 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
         if (classData['sectionsAr'].isEmpty || classData['sectionsFr'].isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Chaque classe doit contenir au moins une section dans les deux langues / يجب أن يحتوي كل فصل على قسم واحد على الأقل باللغتين")),
+          );
+          return;
+        }
+      }
+
+      for (var sectionData in _mainSections) {
+        if (sectionData['mainSectionNameAr'].isEmpty || sectionData['mainSectionNameFr'].isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Vous devez entrer un nom pour chaque section principale dans les deux langues / يجب إدخال اسم لكل قسم رئيسي باللغتين")),
           );
           return;
         }
@@ -262,6 +349,14 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
         categories: {
           'ar': _categoriesAr,
           'fr': _categoriesFr,
+        },
+        mainSections: {
+          'ar': _mainSections.map((m) => m['mainSectionNameAr'] as String).toList(),
+          'fr': _mainSections.map((m) => m['mainSectionNameFr'] as String).toList(),
+        },
+        subSections: {
+          'ar': {for (var m in _mainSections) m['mainSectionNameAr']: m['subSectionsAr']},
+          'fr': {for (var m in _mainSections) m['mainSectionNameFr']: m['subSectionsFr']},
         },
         logoUrl: _logoUrl,
         principalName: {
@@ -343,6 +438,9 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = context.watch<AuthCubit>().state;
+    final isAdmin = authState is AuthAuthenticated && authState.role == 'admin';
+
     return Theme(
       data: Theme.of(context).copyWith(
         primaryColor: Colors.blueAccent,
@@ -395,12 +493,14 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                   if (state is SchoolsLoaded) {
                     setState(() {
                       schools = state.schools;
-                      final authState = context.read<AuthCubit>().state;
-                      if (authState is AuthAuthenticated &&
-                          authState.role == 'school' &&
-                          selectedSchoolId == null &&
-                          schools.isNotEmpty) {
-                        _onSchoolSelected(authState.uid);
+                      if (authState is AuthAuthenticated && selectedSchoolId == null && schools.isNotEmpty) {
+                        if (authState.role == 'school') {
+                          _onSchoolSelected(authState.uid);
+                        } else if (authState.role == 'employee') {
+                          _onSchoolSelected(authState.schoolId);
+                        } else if (authState.role == 'admin' && schools.isNotEmpty) {
+                          _onSchoolSelected(schools.first.schoolId);
+                        }
                       }
                     });
                   } else if (state is SchoolAdded) {
@@ -421,14 +521,13 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                       return Center(child: CircularProgressIndicator());
                     } else if (state is SchoolsLoaded) {
                       schools = state.schools;
-                      final authState = context.read<AuthCubit>().state;
 
                       return Form(
                         key: _formKey,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (authState is AuthAuthenticated && authState.role == 'admin') ...[
+                            if (isAdmin) ...[
                               Center(child: _buildSectionTitle('اختيار مدرسة / Choisir une école')),
                               Row(
                                 children: [
@@ -474,6 +573,15 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ],
                               ),
                               SizedBox(height: 24),
+                            ] else if (selectedSchoolId != null) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'المدرسة: ${schools.firstWhere((s) => s.schoolId == selectedSchoolId).schoolName['ar']} / ${schools.firstWhere((s) => s.schoolId == selectedSchoolId).schoolName['fr']}',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                                ),
+                              ),
+                              SizedBox(height: 16),
                             ],
                             if (selectedSchoolId != null) ...[
                               // Shared Information Section
@@ -742,6 +850,177 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
                                 ),
                               ),
                               SizedBox(height: 24),
+                              // Main Sections and Subsections Section
+                              Container(
+                                padding: EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 5, blurRadius: 7),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildSectionTitle('Sections principales / الأقسام الرئيسية'),
+                                    ElevatedButton(
+                                      onPressed: _addMainSection,
+                                      child: Text('Ajouter une section / إضافة قسم رئيسي', style: TextStyle(fontSize: 16)),
+                                      style: ElevatedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        backgroundColor: Colors.blueAccent,
+                                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      ),
+                                    ),
+                                    SizedBox(height: 16),
+                                    ListView.builder(
+                                      shrinkWrap: true,
+                                      physics: NeverScrollableScrollPhysics(),
+                                      itemCount: _mainSections.length,
+                                      itemBuilder: (context, index) {
+                                        var sectionData = _mainSections[index];
+                                        return Card(
+                                          elevation: 4,
+                                          color: Colors.white,
+                                          margin: EdgeInsets.symmetric(vertical: 8),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          child: Padding(
+                                            padding: EdgeInsets.all(16),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: TextFormField(
+                                                        decoration: InputDecoration(
+                                                          labelText: 'Nom de la section / اسم القسم',
+                                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                          filled: true,
+                                                          fillColor: Colors.white,
+                                                        ),
+                                                        initialValue: sectionData['mainSectionNameFr'],
+                                                        onChanged: (value) => setState(() => _mainSections[index]['mainSectionNameFr'] = value),
+                                                        validator: (value) => value!.isEmpty ? 'Requis / مطلوب' : null,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: TextFormField(
+                                                        decoration: InputDecoration(
+                                                          labelText: 'اسم القسم / Nom de la section',
+                                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                          filled: true,
+                                                          fillColor: Colors.white,
+                                                        ),
+                                                        initialValue: sectionData['mainSectionNameAr'],
+                                                        textDirection: TextDirection.rtl,
+                                                        onChanged: (value) => setState(() => _mainSections[index]['mainSectionNameAr'] = value),
+                                                        validator: (value) => value!.isEmpty ? 'مطلوب / Requis' : null,
+                                                      ),
+                                                    ),
+                                                    IconButton(
+                                                      icon: Icon(Icons.delete, color: Colors.red),
+                                                      onPressed: () => _removeMainSection(index),
+                                                    ),
+                                                  ],
+                                                ),
+                                                SizedBox(height: 16),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Row(
+                                                        children: [
+                                                          Expanded(
+                                                            child: TextFormField(
+                                                              controller: sectionData['subSectionControllerFr'],
+                                                              decoration: InputDecoration(
+                                                                labelText: 'Ajouter une sous-section / إضافة قسم فرعي',
+                                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                                filled: true,
+                                                                fillColor: Colors.white,
+                                                              ),
+                                                              onFieldSubmitted: (value) => _addSubSection(index, 'fr'),
+                                                            ),
+                                                          ),
+                                                          IconButton(
+                                                            icon: Icon(Icons.add, color: Colors.blueAccent),
+                                                            onPressed: () => _addSubSection(index, 'fr'),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: Row(
+                                                        children: [
+                                                          Expanded(
+                                                            child: TextFormField(
+                                                              controller: sectionData['subSectionControllerAr'],
+                                                              decoration: InputDecoration(
+                                                                labelText: 'إضافة قسم فرعي / Ajouter une sous-section',
+                                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                                filled: true,
+                                                                fillColor: Colors.white,
+                                                              ),
+                                                              textDirection: TextDirection.rtl,
+                                                              onFieldSubmitted: (value) => _addSubSection(index, 'ar'),
+                                                            ),
+                                                          ),
+                                                          IconButton(
+                                                            icon: Icon(Icons.add, color: Colors.blueAccent),
+                                                            onPressed: () => _addSubSection(index, 'ar'),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                SizedBox(height: 12),
+                                                Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Wrap(
+                                                        spacing: 8,
+                                                        children: (sectionData['subSectionsFr'] as List<String>).map((subSection) {
+                                                          return Chip(
+                                                            label: Text(subSection),
+                                                            deleteIcon: Icon(Icons.close, size: 18),
+                                                            onDeleted: () => _removeSubSection(index, subSection, 'fr'),
+                                                            backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                                                          );
+                                                        }).toList(),
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: Wrap(
+                                                        spacing: 8,
+                                                        children: (sectionData['subSectionsAr'] as List<String>).map((subSection) {
+                                                          return Chip(
+                                                            label: Text(subSection),
+                                                            deleteIcon: Icon(Icons.close, size: 18),
+                                                            onDeleted: () => _removeSubSection(index, subSection, 'ar'),
+                                                            backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                                                          );
+                                                        }).toList(),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 24),
                               // Categories Section
                               Container(
                                 padding: EdgeInsets.all(16),
@@ -933,5 +1212,38 @@ class _SchoolInfoScreenState extends State<SchoolInfoScreen> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _schoolNameArController.dispose();
+    _cityArController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _currencyArController.dispose();
+    _currencySymbolArController.dispose();
+    _addressArController.dispose();
+    _principalNameArController.dispose();
+    _schoolNameFrController.dispose();
+    _cityFrController.dispose();
+    _currencyFrController.dispose();
+    _currencySymbolFrController.dispose();
+    _addressFrController.dispose();
+    _principalNameFrController.dispose();
+    _currentEmailController.dispose();
+    _newEmailController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _categoryControllerAr.dispose();
+    _categoryControllerFr.dispose();
+    for (var classData in _classes) {
+      classData['sectionControllerAr'].dispose();
+      classData['sectionControllerFr'].dispose();
+    }
+    for (var sectionData in _mainSections) {
+      sectionData['subSectionControllerAr'].dispose();
+      sectionData['subSectionControllerFr'].dispose();
+    }
+    super.dispose();
   }
 }

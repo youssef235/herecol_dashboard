@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:school_management_dashboard/screens/Employee/SalaryCategoriesScreen.dart';
+import 'package:school_management_dashboard/screens/Employee/SalaryTrackingScreen.dart';
+import 'package:school_management_dashboard/screens/payment/FeesManagementScreen.dart';
+import 'package:school_management_dashboard/screens/payment/LatePaymentsScreen.dart';
+import 'package:school_management_dashboard/screens/student/add_student_screen.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,12 +16,16 @@ import 'package:school_management_dashboard/firebase_services/student_firebase_s
 import 'package:school_management_dashboard/screens/school_info/AddSchoolScreen.dart';
 import 'package:school_management_dashboard/screens/school_info/school_info_screen.dart';
 import 'package:school_management_dashboard/screens/stats/stats_screen.dart';
-import 'package:school_management_dashboard/screens/student/add_student_screen.dart';
 import 'package:school_management_dashboard/cubit/school_info/school_info_cubit.dart';
 import 'package:school_management_dashboard/cubit/stats/state_cubit.dart';
 import 'package:school_management_dashboard/cubit/auth/auth_cubit.dart';
 import 'package:school_management_dashboard/screens/auth/login_screen.dart';
+import 'cubit/Employee/EmployeeCubit.dart';
 import 'cubit/auth/auth_state.dart';
+import 'cubit/salary/salary_cubit.dart';
+import 'firebase_services/SalaryFirebaseServices.dart';
+import 'firebase_services/employee_firebase_services.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,23 +41,21 @@ Future<void> main() async {
     ),
   );
 
-  // تهيئة مدير النوافذ
   await windowManager.ensureInitialized();
 
   runApp(MyApp());
 
-  // ضبط حجم النافذة بعد تشغيل التطبيق
   await Future.delayed(const Duration(milliseconds: 500));
   await windowManager.waitUntilReadyToShow(
     const WindowOptions(
-      fullScreen: false, // تشغيل التطبيق بوضع ملء الشاشة
+      fullScreen: false,
       title: 'نظام إدارة المدرسة',
       center: true,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
     ),
         () async {
-      await windowManager.maximize(); // فرض وضع ملء الشاشة
+      await windowManager.maximize();
       await windowManager.show();
     },
   );
@@ -63,6 +70,8 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (context) => StatsCubit(StatsFirebaseServices())),
         BlocProvider(create: (context) => StudentCubit(StudentFirebaseServices())),
         BlocProvider(create: (context) => SchoolCubit(SchoolFirebaseServices())),
+        BlocProvider(create: (context) => EmployeeCubit(EmployeeFirebaseServices())),
+        BlocProvider(create: (context) => SalaryCubit(SalaryFirebaseServices())), // إضافة SalaryCubit
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -85,6 +94,31 @@ class MyApp extends StatelessWidget {
           '/school_info': (context) => SchoolInfoScreen(),
           '/login': (context) => LoginScreen(),
           '/signup': (context) => AddSchoolScreen(),
+          '/fees_management': (context) {
+            final authState = context.read<AuthCubit>().state as AuthAuthenticated;
+            return FeesManagementScreen(
+              schoolId: authState.role == 'school' ? authState.uid : null,
+            );
+          },
+          '/late_payments': (context) {
+            final authState = context.read<AuthCubit>().state as AuthAuthenticated;
+            return LatePaymentsScreen(
+              schoolId: authState.role == 'school' ? authState.uid : null,
+              role: authState.role,
+            );
+          },
+          '/salary_categories': (context) {
+            final authState = context.read<AuthCubit>().state as AuthAuthenticated;
+            return SalaryCategoriesScreen(
+              schoolId: authState.role == 'school' ? authState.uid : authState.schoolId,
+            );
+          },
+          '/salary_tracking': (context) {
+            final authState = context.read<AuthCubit>().state as AuthAuthenticated;
+            return SalaryTrackingScreen(
+              schoolId: authState.role == 'school' ? authState.uid : authState.schoolId,
+            );
+          },
         },
       ),
     );

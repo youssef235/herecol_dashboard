@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import '../../models/Payment.dart';
+import '../../models/fee_structure_model.dart';
 import '../../models/student_model.dart';
 
 abstract class StudentState extends Equatable {
@@ -47,4 +49,19 @@ class StudentError extends StudentState {
 
   @override
   List<Object> get props => [message];
+}
+
+class PaymentAdded extends StudentState {}
+
+class PaymentsLoaded extends StudentState {
+  final List<Payment> payments;
+
+  PaymentsLoaded(this.payments);
+}
+
+class FeeStructureAdded extends StudentState {}
+
+class FeeStructuresLoaded extends StudentState {
+  final List<FeeStructure> feeStructures;
+  FeeStructuresLoaded(this.feeStructures);
 }

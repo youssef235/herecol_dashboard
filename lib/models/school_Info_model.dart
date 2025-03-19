@@ -9,7 +9,9 @@ class Schoolinfo {
   Map<String, String> address;
   Map<String, List<String>> classes;
   Map<String, Map<String, List<String>>> sections;
-  Map<String, List<String>> categories; // الفئات متعددة اللغات
+  Map<String, List<String>> categories;
+  Map<String, List<String>> mainSections; // الأقسام الرئيسية
+  Map<String, Map<String, List<String>>> subSections; // الأقسام الفرعية مربوطة بالرئيسية
   String? logoUrl;
   Map<String, String> principalName;
   String? principalSignatureUrl;
@@ -27,6 +29,8 @@ class Schoolinfo {
     required this.classes,
     required this.sections,
     required this.categories,
+    required this.mainSections,
+    required this.subSections,
     this.logoUrl,
     this.principalName = const {'ar': '', 'fr': ''},
     this.principalSignatureUrl,
@@ -51,6 +55,13 @@ class Schoolinfo {
         ),
       ),
       'categories': categories.map((key, value) => MapEntry(key, value)),
+      'mainSections': mainSections,
+      'subSections': subSections.map(
+            (lang, sectionMap) => MapEntry(
+          lang,
+          sectionMap.map((key, value) => MapEntry(key, value)),
+        ),
+      ),
       'logoUrl': logoUrl,
       'principalName': principalName,
       'principalSignatureUrl': principalSignatureUrl,
@@ -81,7 +92,18 @@ class Schoolinfo {
       ) ?? {'ar': {}, 'fr': {}},
       categories: (map['categories'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, List<String>.from(value ?? [])),
-      ) ?? {'ar': [], 'fr': []}, // تهيئة افتراضية للفئات
+      ) ?? {'ar': [], 'fr': []},
+      mainSections: (map['mainSections'] as Map<String, dynamic>?)?.map(
+            (key, value) => MapEntry(key, List<String>.from(value ?? [])),
+      ) ?? {'ar': [], 'fr': []},
+      subSections: (map['subSections'] as Map<String, dynamic>?)?.map(
+            (lang, sectionMap) => MapEntry(
+          lang,
+          (sectionMap as Map<String, dynamic>).map(
+                (key, value) => MapEntry(key, List<String>.from(value ?? [])),
+          ),
+        ),
+      ) ?? {'ar': {}, 'fr': {}},
       logoUrl: map['logoUrl'],
       principalName: Map<String, String>.from(map['principalName'] ?? {'ar': '', 'fr': ''}),
       principalSignatureUrl: map['principalSignatureUrl'],

@@ -1,3 +1,5 @@
+import 'fee_structure_model.dart';
+
 class Student {
   final String id;
   final String firstNameAr;
@@ -27,6 +29,7 @@ class Student {
   final Map<String, String>? attendanceHistory;
   final double? feesDue;
   final double? feesPaid;
+  final FeeStructure? feeStructure; // هيكل المصاريف المرتبط بالطالب
 
   Student({
     required this.id,
@@ -57,9 +60,10 @@ class Student {
     this.attendanceHistory,
     this.feesDue,
     this.feesPaid,
+    this.feeStructure,
   });
 
-  factory Student.fromFirestore(Map<String, dynamic> data, String id) {
+  factory Student.fromFirestore(Map<String, dynamic> data, String id, [FeeStructure? feeStructure]) {
     return Student(
       id: id,
       firstNameAr: data['firstNameAr'] ?? '',
@@ -91,6 +95,7 @@ class Student {
       ),
       feesDue: (data['feesDue'] as num?)?.toDouble(),
       feesPaid: (data['feesPaid'] as num?)?.toDouble(),
+      feeStructure: feeStructure,
     );
   }
 

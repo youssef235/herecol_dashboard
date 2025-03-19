@@ -1,6 +1,8 @@
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:school_management_dashboard/firebase_services/student_firebase_services.dart';
+import '../../models/Payment.dart';
+import '../../models/fee_structure_model.dart';
 import '../../models/student_model.dart';
 import 'student_state.dart';
 import 'dart:async';
@@ -93,7 +95,7 @@ class StudentCubit extends Cubit<StudentState> {
     }
   }
 
-  void streamStudents({required String schoolId, String? grade, String? section, String language = 'fr'}) {
+  void streamStudents({required String schoolId}) {
     if (isClosed) return;
     emit(StudentLoading());
 
@@ -101,11 +103,7 @@ class StudentCubit extends Cubit<StudentState> {
     _studentsSubscription = _firebaseServices.streamSchoolStudents(schoolId).listen(
           (students) {
         if (!isClosed) {
-          emit(StudentsLoaded(students.where((student) {
-            final matchesGrade = grade == null || (language == 'ar' ? student.gradeAr : student.gradeFr) == grade;
-            final matchesSection = section == null || (language == 'ar' ? student.sectionAr : student.sectionFr) == section;
-            return matchesGrade && matchesSection;
-          }).toList()));
+          emit(StudentsLoaded(students));
         }
       },
       onError: (e) {
@@ -114,6 +112,28 @@ class StudentCubit extends Cubit<StudentState> {
     );
   }
 
+  void streamAllStudents() {
+    if (isClosed) return;
+    emit(StudentLoading());
+
+    _studentsSubscription?.cancel();
+    _studentsSubscription = _firebaseServices.streamAllStudents().listen(
+          (students) {
+        if (!isClosed) {
+          emit(StudentsLoaded(students));
+        }
+      },
+      onError: (e) {
+        if (!isClosed) emit(StudentError('خطأ في جلب جميع الطلاب: $e'));
+      },
+    );
+  }
+
+  @override
+  Future<void> close() {
+    _studentsSubscription?.cancel();
+    return super.close();
+  }
   void fetchAllStudents() async {
     emit(StudentLoading());
     try {
@@ -231,9 +251,70 @@ class StudentCubit extends Cubit<StudentState> {
     }
   }
 
-  @override
-  Future<void> close() {
-    _studentsSubscription?.cancel();
-    return super.close();
+  void addPayment({
+    required String schoolId,
+    required String studentId,
+    required double amount,
+    required DateTime date,
+  }) async {
+    emit(StudentLoading());
+    try {
+      final paymentId = DateTime.now().millisecondsSinceEpoch.toString();
+      final payment = Payment(
+        id: paymentId,
+        amount: amount,
+        date: date,
+      );
+      await _firebaseServices.addPayment(
+        schoolId: schoolId,
+        studentId: studentId,
+        payment: payment,
+      );
+      emit(PaymentAdded());
+    } catch (e) {
+      emit(StudentError('فشل في إضافة الدفع: $e'));
+    }
   }
+
+  void fetchPayments({
+    required String schoolId,
+    required String studentId,
+  }) async {
+    emit(StudentLoading());
+    try {
+      final payments = await _firebaseServices.getPayments(
+        schoolId: schoolId,
+        studentId: studentId,
+      );
+      emit(PaymentsLoaded(payments));
+    } catch (e) {
+      emit(StudentError('خطأ في جلب المدفوعات: $e'));
+    }
+  }
+  void addFeeStructure({
+    required String schoolId,
+    required FeeStructure feeStructure,
+  }) async {
+    emit(StudentLoading());
+    try {
+      await _firebaseServices.addFeeStructure(
+        schoolId: schoolId,
+        feeStructure: feeStructure,
+      );
+      emit(FeeStructureAdded());
+    } catch (e) {
+      emit(StudentError('فشل في إضافة هيكل المصاريف: $e'));
+    }
+  }
+
+  void fetchFeeStructures(String schoolId) async {
+    emit(StudentLoading());
+    try {
+      final feeStructures = await _firebaseServices.getFeeStructures(schoolId);
+      emit(FeeStructuresLoaded(feeStructures));
+    } catch (e) {
+      emit(StudentError('خطأ في جلب هياكل المصاريف: $e'));
+    }
+  }
+
 }

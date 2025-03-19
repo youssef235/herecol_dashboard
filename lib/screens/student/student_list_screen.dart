@@ -42,16 +42,25 @@ class _StudentListScreenState extends State<StudentListScreen> {
   void _loadInitialData() {
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
-      context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
-      if (authState.role == 'school') {
-        selectedSchoolId = widget.schoolId ?? authState.uid;
-        context.read<StudentCubit>().fetchStudents(schoolId: selectedSchoolId!, language: _selectedLanguage);
-      } else {
+      if (authState.role == 'admin') {
+        // إذا كان المستخدم admin، جلب جميع المدارس وجميع الطلاب
+        context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
         context.read<StudentCubit>().fetchAllStudents();
+      } else if (authState.role == 'school') {
+        // إذا كان المستخدم مدرسة، استخدم uid أو schoolId الممرر كـ selectedSchoolId
+        selectedSchoolId = widget.schoolId ?? authState.uid;
+        context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, authState.role);
+        context.read<StudentCubit>().fetchStudents(schoolId: selectedSchoolId!, language: _selectedLanguage);
+      } else if (authState.role == 'employee') {
+        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
+        selectedSchoolId = authState.schoolId;
+        if (selectedSchoolId != null) {
+          context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, 'school');
+          context.read<StudentCubit>().fetchStudents(schoolId: selectedSchoolId!, language: _selectedLanguage);
+        }
       }
     }
   }
-
   void _filterStudents() {
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
@@ -267,6 +276,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
           classes: {'fr': [], 'ar': []},
           sections: {'fr': {}, 'ar': {}},
           categories: {'fr': [], 'ar': []},
+          mainSections: {'fr': [], 'ar': []}, // إضافة mainSections
+          subSections: {'fr': {}, 'ar': {}},   // إضافة subSections
           principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
         ),
       );
@@ -523,6 +534,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       classes: {'fr': [], 'ar': []},
                       sections: {'fr': {}, 'ar': {}},
                       categories: {'fr': [], 'ar': []},
+                      mainSections: {'fr': [], 'ar': []}, // إضافة mainSections
+                      subSections: {'fr': {}, 'ar': {}},   // إضافة subSections
                       principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
                     ),
                   );
@@ -602,6 +615,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       classes: {'fr': [], 'ar': []},
                       sections: {'fr': {}, 'ar': {}},
                       categories: {'fr': [], 'ar': []},
+                      mainSections: {'fr': [], 'ar': []}, // Added required mainSections
+                      subSections: {'fr': {}, 'ar': {}},   // Added required subSections
                       principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
                     ),
                   );
@@ -624,7 +639,6 @@ class _StudentListScreenState extends State<StudentListScreen> {
                     'principalSignatureUrl': school.principalSignatureUrl ?? '',
                   };
                 }).toList();
-
                 await _generateNamesListPdf(studentData);
                 Navigator.of(context).pop();
               }
