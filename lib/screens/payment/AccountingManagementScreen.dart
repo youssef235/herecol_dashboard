@@ -32,15 +32,12 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
       if (authState.role == 'school') {
-        // إذا كان المستخدم هو مدرسة، استخدم uid كـ schoolId
         _selectedSchoolId = widget.schoolId ?? authState.uid;
         context.read<SchoolCubit>().fetchSchools(_selectedSchoolId!, 'school');
         context.read<SalaryCubit>().fetchSalaryCategories(_selectedSchoolId!);
       } else if (authState.role == 'admin') {
-        // إذا كان المستخدم admin، جلب جميع المدارس
         context.read<SchoolCubit>().fetchSchools(authState.uid, 'admin');
       } else if (authState.role == 'employee') {
-        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
         _selectedSchoolId = authState.schoolId;
         if (_selectedSchoolId != null) {
           context.read<SchoolCubit>().fetchSchools(_selectedSchoolId!, 'school');
@@ -71,7 +68,7 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
     });
   }
 
-  void _saveFeeStructure() {
+  void _saveFeeStructure() async {
     if (_selectedSchoolId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى اختيار مدرسة أولاً')),
@@ -91,13 +88,16 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
       return;
     }
 
+    final feeStructureId = DateTime.now().millisecondsSinceEpoch.toString();
     final feeStructure = FeeStructure(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: feeStructureId,
       gradeAr: _selectedGradeAr!,
       gradeFr: _selectedGradeFr!,
-      installments: installments.map((installment) {
+      installments: installments.asMap().entries.map((entry) {
+        final index = entry.key;
+        final installment = entry.value;
         return Installment(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: '$feeStructureId-$index',
           amount: double.tryParse(installment['amountController'].text) ?? 0.0,
           dueDate: installment['dueDate'],
         );
@@ -105,10 +105,29 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
       installmentCount: _selectedInstallmentCount!,
     );
 
-    context.read<StudentCubit>().addFeeStructure(
-      schoolId: _selectedSchoolId!,
-      feeStructure: feeStructure,
-    );
+    // حفظ هيكل المصاريف في Firestore
+    await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(_selectedSchoolId)
+        .collection('feeStructures')
+        .doc(feeStructureId)
+        .set(feeStructure.toFirestore());
+
+    // تحديث جميع الطلاب في الصف المحدد
+    final studentsSnapshot = await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(_selectedSchoolId)
+        .collection('students')
+        .where('gradeAr', isEqualTo: _selectedGradeAr)
+        .get();
+
+    final totalFeesDue = feeStructure.installments.fold<double>(0, (sum, i) => sum + i.amount);
+
+    for (var studentDoc in studentsSnapshot.docs) {
+      await studentDoc.reference.update({
+        'totalFeesDue': totalFeesDue,
+      });
+    }
 
     setState(() {
       _selectedGradeAr = null;
@@ -119,8 +138,11 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
       }
       installments.clear();
     });
-  }
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حفظ هيكل المصاريف وتحديث الطلاب بنجاح')),
+    );
+  }
   void _addNewInstallment(FeeStructure feeStructure) async {
     final amountController = TextEditingController();
     DateTime dueDate = DateTime.now();
@@ -143,7 +165,171 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
                 final pickedDate = await showDatePicker(
                   context: context,
                   initialDate: dueDate,
-                  firstDate: DateTime.now(),
+                  firstDate: DateTime(2000), // يسمح باختيار تواريخ من سنة 2000 وما بعد
+                  lastDate: DateTime(2100),
+                );
+                if (pickedDate != null) {
+                  dueDate = pickedDate;
+                  Navigator.pop(context, {
+                    'amount': double.tryParse(amountController.text) ?? 0.0,
+                    'dueDate': pickedDate,
+                  });
+                }
+              },
+              child: Text(
+                'تاريخ الاستحقاق: ${dueDate.toString().substring(0, 10)}',
+                style: const TextStyle(color: Colors.blueAccent),
+              ),
+            ),          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء / Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (amountController.text.isNotEmpty) {
+                Navigator.pop(context, {
+                  'amount': double.tryParse(amountController.text) ?? 0.0,
+                  'dueDate': dueDate,
+                });
+              }
+            },
+            child: const Text('حفظ / Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      final newInstallment = Installment(
+        id: '${feeStructure.id}-${feeStructure.installments.length}', // معرف فريد باستخدام عدد الأقساط الحالي
+        amount: result['amount'],
+        dueDate: result['dueDate'],
+      );
+
+      final updatedInstallments = [...feeStructure.installments, newInstallment];
+      final updatedFeeStructure = FeeStructure(
+        id: feeStructure.id,
+        gradeAr: feeStructure.gradeAr,
+        gradeFr: feeStructure.gradeFr,
+        installments: updatedInstallments,
+        installmentCount: updatedInstallments.length,
+      );
+
+      context.read<StudentCubit>().addFeeStructure(
+        schoolId: _selectedSchoolId!,
+        feeStructure: updatedFeeStructure,
+      );
+    }
+  }
+
+  void _editInstallment(int index) async {
+    final amountController = TextEditingController(
+      text: installments[index]['amountController'].text,
+    );
+    DateTime dueDate = installments[index]['dueDate'];
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تعديل القسط / Modifier la tranche'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: _buildInputDecoration('المبلغ / Montant'),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () async {
+                final pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: dueDate,
+                  firstDate: DateTime(2000), // يسمح باختيار تواريخ من سنة 2000 وما بعد
+                  lastDate: DateTime(2100),
+
+                );
+                if (pickedDate != null) {
+                  dueDate = pickedDate;
+                  Navigator.pop(context, {
+                    'amount': double.tryParse(amountController.text) ?? 0.0,
+                    'dueDate': pickedDate,
+                  });
+                }
+              },
+              child: Text(
+                'تاريخ الاستحقاق: ${dueDate.toString().substring(0, 10)}',
+                style: const TextStyle(color: Colors.blueAccent),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء / Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (amountController.text.isNotEmpty) {
+                Navigator.pop(context, {
+                  'amount': double.tryParse(amountController.text) ?? 0.0,
+                  'dueDate': dueDate,
+                });
+              }
+            },
+            child: const Text('حفظ / Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        installments[index]['amountController'].text = result['amount'].toString();
+        installments[index]['dueDate'] = result['dueDate'];
+      });
+    }
+  }
+
+  void _deleteInstallment(int index) {
+    setState(() {
+      installments[index]['amountController'].dispose();
+      installments.removeAt(index);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حذف القسط بنجاح / Tranche supprimée avec succès')),
+    );
+  }
+
+  void _editExistingInstallment(FeeStructure feeStructure, int installmentIndex) async {
+    final installment = feeStructure.installments[installmentIndex];
+    final amountController = TextEditingController(text: installment.amount.toString());
+    DateTime dueDate = installment.dueDate;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تعديل القسط / Modifier la tranche'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: _buildInputDecoration('المبلغ / Montant'),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () async {
+                final pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: dueDate,
+                  firstDate: DateTime(2000),
                   lastDate: DateTime(2100),
                 );
                 if (pickedDate != null) {
@@ -182,13 +368,13 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
     );
 
     if (result != null) {
-      final newInstallment = Installment(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      final updatedInstallments = List<Installment>.from(feeStructure.installments);
+      updatedInstallments[installmentIndex] = Installment(
+        id: installment.id,
         amount: result['amount'],
         dueDate: result['dueDate'],
       );
 
-      final updatedInstallments = [...feeStructure.installments, newInstallment];
       final updatedFeeStructure = FeeStructure(
         id: feeStructure.id,
         gradeAr: feeStructure.gradeAr,
@@ -197,11 +383,33 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
         installmentCount: updatedInstallments.length,
       );
 
-      context.read<StudentCubit>().addFeeStructure(
+      context.read<StudentCubit>().updateFeeStructure(
         schoolId: _selectedSchoolId!,
         feeStructure: updatedFeeStructure,
       );
     }
+  }
+
+  void _deleteExistingInstallment(FeeStructure feeStructure, int installmentIndex) {
+    final updatedInstallments = List<Installment>.from(feeStructure.installments);
+    updatedInstallments.removeAt(installmentIndex);
+
+    final updatedFeeStructure = FeeStructure(
+      id: feeStructure.id,
+      gradeAr: feeStructure.gradeAr,
+      gradeFr: feeStructure.gradeFr,
+      installments: updatedInstallments,
+      installmentCount: updatedInstallments.length,
+    );
+
+    context.read<StudentCubit>().updateFeeStructure(
+      schoolId: _selectedSchoolId!,
+      feeStructure: updatedFeeStructure,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حذف القسط بنجاح / Tranche supprimée avec succès')),
+    );
   }
 
   @override
@@ -402,40 +610,55 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: installments.length,
                       itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: installments[index]['amountController'],
-                                  keyboardType: TextInputType.number,
-                                  decoration: _buildInputDecoration('قيمة القسط / Montant'),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: () async {
-                                    final pickedDate = await showDatePicker(
-                                      context: context,
-                                      initialDate: installments[index]['dueDate'],
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2100),
-                                    );
-                                    if (pickedDate != null) {
-                                      setState(() {
-                                        installments[index]['dueDate'] = pickedDate;
-                                      });
-                                    }
-                                  },
-                                  child: Text(
-                                    'تاريخ الاستحقاق: ${installments[index]['dueDate'].toString().substring(0, 10)}',
-                                    style: const TextStyle(color: Colors.blueAccent),
+                        return Card(
+                          elevation: 4,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: TextField(
+                                    controller: installments[index]['amountController'],
+                                    keyboardType: TextInputType.number,
+                                    decoration: _buildInputDecoration('قيمة القسط / Montant'),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  flex: 3,
+                                  child: TextButton(
+                                    onPressed: () async {
+                                      final pickedDate = await showDatePicker(
+                                        context: context,
+                                        initialDate: installments[index]['dueDate'],
+                                        firstDate:  DateTime(2000),
+                                        lastDate: DateTime(2100),
+                                      );
+                                      if (pickedDate != null) {
+                                        setState(() {
+                                          installments[index]['dueDate'] = pickedDate;
+                                        });
+                                      }
+                                    },
+                                    child: Text(
+                                      'تاريخ الاستحقاق: ${installments[index]['dueDate'].toString().substring(0, 10)}',
+                                      style: const TextStyle(color: Colors.blueAccent),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.orange),
+                                  onPressed: () => _editInstallment(index),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _deleteInstallment(index),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -504,25 +727,71 @@ class _AccountingManagementScreenState extends State<AccountingManagementScreen>
                           itemBuilder: (context, index) {
                             final feeStructure = feeStructures[index];
                             return Card(
-                              elevation: 2,
+                              elevation: 4,
                               margin: const EdgeInsets.symmetric(vertical: 8),
-                              child: ListTile(
-                                title: Text(
-                                  '${feeStructure.gradeAr} / ${feeStructure.gradeFr}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Column(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('عدد الأقساط: ${feeStructure.installmentCount}'),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${feeStructure.gradeAr} / ${feeStructure.gradeFr}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                            color: Colors.blueAccent,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add, color: Colors.blueAccent),
+                                          onPressed: () => _addNewInstallment(feeStructure),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
                                     Text(
-                                      'الأقساط: ${feeStructure.installments.map((i) => "${i.amount} - ${i.dueDate.toString().substring(0, 10)}").join(", ")}',
+                                      'عدد الأقساط: ${feeStructure.installmentCount}',
+                                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: feeStructure.installments.asMap().entries.map((entry) {
+                                        final i = entry.value;
+                                        final installmentIndex = entry.key;
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.payment, size: 18, color: Colors.green),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: GestureDetector(
+                                                  onTap: () => _editExistingInstallment(feeStructure, installmentIndex),
+                                                  child: Text(
+                                                    '${i.amount} - ${i.dueDate.toString().substring(0, 10)}',
+                                                    style: const TextStyle(fontSize: 14),
+                                                  ),
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit, color: Colors.orange),
+                                                onPressed: () => _editExistingInstallment(feeStructure, installmentIndex),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete, color: Colors.red),
+                                                onPressed: () => _deleteExistingInstallment(feeStructure, installmentIndex),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
                                   ],
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.add, color: Colors.blueAccent),
-                                  onPressed: () => _addNewInstallment(feeStructure),
                                 ),
                               ),
                             );

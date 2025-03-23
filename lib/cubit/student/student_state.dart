@@ -20,10 +20,6 @@ class StudentUpdated extends StudentState {}
 
 class StudentDeleted extends StudentState {}
 
-class StudentFeesUpdated extends StudentState {} // يمكن استخدامها للإشعارات ولكن ليست ضرورية مع التدفق
-
-class StudentAttendanceUpdated extends StudentState {}
-
 class StudentsLoaded extends StudentState {
   final List<Student> students;
 
@@ -53,15 +49,30 @@ class StudentError extends StudentState {
 
 class PaymentAdded extends StudentState {}
 
+class PaymentUpdated extends StudentState {}
+
+class PaymentDeleted extends StudentState {}
+
+class PaymentMarkedUnpaid extends StudentState {}
+
 class PaymentsLoaded extends StudentState {
   final List<Payment> payments;
 
-  PaymentsLoaded(this.payments);
+  const PaymentsLoaded(this.payments);
+
+  @override
+  List<Object> get props => [payments];
 }
 
 class FeeStructureAdded extends StudentState {}
 
 class FeeStructuresLoaded extends StudentState {
   final List<FeeStructure> feeStructures;
-  FeeStructuresLoaded(this.feeStructures);
+
+  const FeeStructuresLoaded(this.feeStructures);
+
+  @override
+  List<Object> get props => [feeStructures];
 }
+
+class FeeStructureUpdated extends StudentState {}

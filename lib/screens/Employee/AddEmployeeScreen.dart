@@ -8,15 +8,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:school_management_dashboard/cubit/Employee/EmployeeCubit.dart';
 import 'package:school_management_dashboard/cubit/auth/auth_cubit.dart';
 import 'package:school_management_dashboard/cubit/salary/salary_cubit.dart';
-import 'package:school_management_dashboard/cubit/salary/salary_state.dart';
 import 'package:school_management_dashboard/cubit/school_info/school_info_cubit.dart';
 import 'package:school_management_dashboard/cubit/school_info/school_info_state.dart';
 import 'package:school_management_dashboard/firebase_services/employee_firebase_services.dart';
 import 'package:school_management_dashboard/firebase_services/school_info_firebase_services.dart';
 import 'package:school_management_dashboard/models/employee_model.dart';
 import '../../cubit/auth/auth_state.dart';
+import '../../cubit/salary/salary_state.dart';
 import '../../firebase_services/SalaryFirebaseServices.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'EmployeeListWithFilterScreen.dart';
+
 class AddEmployeeScreen extends StatelessWidget {
   final String? schoolId;
 
@@ -84,6 +85,8 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
   String? _selectedGenderAr;
   String? _selectedGenderFr;
   String? _selectedSalaryCategoryId;
+  String? _selectedSalaryCategoryAr;
+  String? _selectedSalaryCategoryFr;
   List<String> _selectedPermissions = [];
 
   final Map<String, String> _genders = {
@@ -91,7 +94,6 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
     'أنثى': 'Féminin',
   };
 
-  // قائمة الصلاحيات تتطابق مع CustomDrawer
   static const Map<String, String> availablePermissions = {
     'StatsScreen': 'الإحصائيات / Statistiques',
     'SchoolInfoScreen': 'معلومات المدرسة / Informations sur l’école',
@@ -106,6 +108,8 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
     'AddEmployeeScreen': 'إضافة موظف / Ajouter un employé',
     'SalaryCategoriesScreen': 'فئات الرواتب / Catégories de salaires',
     'SalaryTrackingScreen': 'تتبع دفع الرواتب / Suivi des paiements de salaire',
+    'ParentListScreen': 'قائمة أولياء الأمور / Liste des parents', // إضافة شاشة قائمة أولياء الأمور
+    'AddParentScreen': 'إضافة ولي أمر / Ajouter un parent', // افترضت وجود شاشة إضافة ولي أمر
   };
 
   @override
@@ -174,16 +178,13 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
           password: _passwordController.text,
         );
 
-        // تعيين الـ role بناءً على القسم الرئيسي
         String employeeRole = _selectedDepartmentAr == 'المحاسبة' ? 'finance' : 'teacher';
 
-        // إذا لم يتم اختيار صلاحيات يدويًا، استخدم القيم الافتراضية بناءً على الـ role
         if (_selectedPermissions.isEmpty) {
           _selectedPermissions = EmployeeFirebaseServices.defaultPermissions[employeeRole] ?? [];
         }
 
         final employee = Employee(
-          id: userCredential.user!.uid,
           fullNameAr: _fullNameArController.text,
           fullNameFr: _fullNameFrController.text,
           genderAr: _selectedGenderAr!,
@@ -207,7 +208,6 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
 
         context.read<EmployeeCubit>().addEmployee(employee, _selectedSchoolId!);
 
-        // حفظ بيانات المستخدم في مجموعة 'users' مع الـ role و schoolId والصلاحيات
         await FirebaseFirestore.instance.collection('users').doc(employee.id).set({
           'email': employee.email,
           'role': 'employee',
@@ -218,7 +218,13 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم إضافة الموظف بنجاح')),
         );
-        Navigator.pop(context);
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EmployeeListWithFilterScreen(schoolId: _selectedSchoolId),
+          ),
+        );
       } on FirebaseAuthException catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('خطأ في إنشاء الحساب: ${e.message}')),
@@ -260,61 +266,26 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
                     ),
                   ],
                 ),
-                child: BlocBuilder<SchoolCubit, SchoolState>(
-                  builder: (context, schoolState) {
-                    if (schoolState is SchoolsLoaded) {
-                      if (schoolState.schools.isEmpty) {
-                        return const Center(child: Text('لا توجد مدارس متاحة حاليًا'));
-                      }
-
-                      final uniqueSchools = schoolState.schools.toSet().toList();
-
-                      if (_selectedSchoolId != null && !uniqueSchools.any((school) => school.schoolId == _selectedSchoolId)) {
-                        _selectedSchoolId = null;
-                      }
-
-                      if (isSuperAdmin && _selectedSchoolId == null && uniqueSchools.isNotEmpty) {
-                        _selectedSchoolId = uniqueSchools.first.schoolId;
-                        context.read<SalaryCubit>().fetchSalaryCategories(_selectedSchoolId!);
-                      }
-
-                      final school = uniqueSchools.firstWhere(
-                            (s) => s.schoolId == _selectedSchoolId,
-                        orElse: () => uniqueSchools.first,
-                      );
-
-                      final mainSectionsAr = (school.mainSections['ar'] as List<dynamic>?)
-                          ?.map((e) => e as String)
-                          .toList() ??
-                          [];
-                      final subSectionsAr = (school.subSections['ar'] as Map<String, dynamic>?)
-                          ?.map((key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList())) ??
-                          {};
-                      final mainSectionsFr = (school.mainSections['fr'] as List<dynamic>?)
-                          ?.map((e) => e as String)
-                          .toList() ??
-                          [];
-                      final subSectionsFr = (school.subSections['fr'] as Map<String, dynamic>?)
-                          ?.map((key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList())) ??
-                          {};
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: _buildImagePicker(
-                              label: 'صورة الموظف / Photo de l’employé',
-                              imageUrl: _profileImageUrl,
-                              onTap: _pickImage,
-                              size: 200,
-                            ),
-                          ),
-                          _buildSectionTitle('معلومات مشتركة / Informations communes'),
-                          if (isSuperAdmin) ...[
-                            DropdownButtonFormField<String>(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: _buildImagePicker(
+                        label: 'صورة الموظف / Photo de l’employé',
+                        imageUrl: _profileImageUrl,
+                        onTap: _pickImage,
+                        size: 200,
+                      ),
+                    ),
+                    _buildSectionTitle('معلومات مشتركة / Informations communes'),
+                    if (isSuperAdmin) ...[
+                      BlocBuilder<SchoolCubit, SchoolState>(
+                        builder: (context, schoolState) {
+                          if (schoolState is SchoolsLoaded) {
+                            return DropdownButtonFormField<String>(
                               decoration: _buildInputDecoration('المدرسة / École'),
                               value: _selectedSchoolId,
-                              items: uniqueSchools.map((school) {
+                              items: schoolState.schools.map((school) {
                                 return DropdownMenuItem(
                                   value: school.schoolId,
                                   child: Text('${school.schoolName['ar'] ?? 'غير متوفر'} / ${school.schoolName['fr'] ?? 'Non disponible'}'),
@@ -323,73 +294,63 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
                               onChanged: (value) {
                                 setState(() {
                                   _selectedSchoolId = value;
-                                  _selectedDepartmentAr = null;
-                                  _selectedSubDepartmentAr = null;
-                                  _selectedDepartmentFr = null;
-                                  _selectedSubDepartmentFr = null;
                                   if (value != null) {
                                     context.read<SalaryCubit>().fetchSalaryCategories(value);
                                   }
                                 });
                               },
                               validator: (value) => value == null ? 'مطلوب' : null,
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          _buildTextField(
-                            label: 'رقم الهاتف / Numéro de téléphone',
-                            controller: _phoneController,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildTextField(
-                            label: 'رقم هاتف احتياطي / Numéro de téléphone secondaire',
-                            controller: _secondaryPhoneController,
-                            isRequired: false,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildTextField(
-                            label: 'البريد الإلكتروني / E-mail',
-                            controller: _emailController,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildTextField(
-                            label: 'كلمة المرور / Mot de passe',
-                            controller: _passwordController,
-                            obscureText: true,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _birthDateController,
-                            readOnly: true,
-                            decoration: _buildInputDecoration('تاريخ الميلاد / Date de naissance').copyWith(
-                              suffixIcon: const Icon(Icons.calendar_today),
-                            ),
-                            onTap: () async {
-                              DateTime? pickedDate = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime.now(),
-                                firstDate: DateTime(1900),
-                                lastDate: DateTime.now(),
-                              );
-                              if (pickedDate != null) {
-                                setState(() {
-                                  _birthDateController.text = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
-                                });
-                              }
-                            },
-                            validator: (value) => value!.isEmpty ? 'مطلوب' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildSalaryCategoryDropdown(),
-                          const SizedBox(height: 12),
-                          _buildPermissionsSelector(),
-                        ],
-                      );
-                    } else if (schoolState is SchoolError) {
-                      return Center(child: Text('خطأ: ${schoolState.message}'));
-                    }
-                    return const Center(child: CircularProgressIndicator());
-                  },
+                            );
+                          }
+                          return const SizedBox();
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    _buildTextField(
+                      label: 'رقم الهاتف / Numéro de téléphone',
+                      controller: _phoneController,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      label: 'رقم هاتف احتياطي / Numéro de téléphone secondaire',
+                      controller: _secondaryPhoneController,
+                      isRequired: false,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      label: 'البريد الإلكتروني / E-mail',
+                      controller: _emailController,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTextField(
+                      label: 'كلمة المرور / Mot de passe',
+                      controller: _passwordController,
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _birthDateController,
+                      readOnly: true,
+                      decoration: _buildInputDecoration('تاريخ الميلاد / Date de naissance').copyWith(
+                        suffixIcon: const Icon(Icons.calendar_today),
+                      ),
+                      onTap: () async {
+                        DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                        );
+                        if (pickedDate != null) {
+                          setState(() {
+                            _birthDateController.text = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+                          });
+                        }
+                      },
+                      validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
@@ -411,76 +372,95 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
                         ],
                       ),
                       child: BlocBuilder<SchoolCubit, SchoolState>(
-                        builder: (context, state) {
-                          if (state is SchoolsLoaded) {
-                            final uniqueSchools = state.schools.toSet().toList();
-                            final school = uniqueSchools.firstWhere(
-                                  (s) => s.schoolId == _selectedSchoolId,
-                              orElse: () => uniqueSchools.first,
-                            );
+                        builder: (context, schoolState) {
+                          return BlocBuilder<SalaryCubit, SalaryState>(
+                            builder: (context, salaryState) {
+                              if (schoolState is SchoolsLoaded && salaryState is SalaryCategoriesLoaded && _selectedSchoolId != null) {
+                                final school = schoolState.schools.firstWhere(
+                                      (s) => s.schoolId == _selectedSchoolId,
+                                  orElse: () => schoolState.schools.first,
+                                );
+                                final mainSectionsAr = (school.mainSections['ar'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [];
+                                final subSectionsAr = (school.subSections['ar'] as Map<String, dynamic>?)?.map(
+                                      (key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList()),
+                                ) ?? {};
 
-                            final mainSectionsAr = (school.mainSections['ar'] as List<dynamic>?)
-                                ?.map((e) => e as String)
-                                .toList() ??
-                                [];
-                            final subSectionsAr = (school.subSections['ar'] as Map<String, dynamic>?)
-                                ?.map((key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList())) ??
-                                {};
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionTitle('معلومات بالعربية'),
-                                _buildTextField(label: 'الاسم الكامل', controller: _fullNameArController, textDirection: TextDirection.rtl),
-                                const SizedBox(height: 12),
-                                _buildTextField(label: 'العنوان', controller: _addressArController, textDirection: TextDirection.rtl),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  decoration: _buildInputDecoration('الجنس'),
-                                  value: _selectedGenderAr,
-                                  items: _genders.keys.map((gender) => DropdownMenuItem(value: gender, child: Text(gender))).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedGenderAr = value;
-                                      _selectedGenderFr = _genders[value];
-                                    });
-                                  },
-                                  validator: (value) => value == null ? 'مطلوب' : null,
-                                ),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  decoration: _buildInputDecoration('القسم الرئيسي'),
-                                  value: _selectedDepartmentAr,
-                                  items: mainSectionsAr.map((department) => DropdownMenuItem(value: department, child: Text(department))).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedDepartmentAr = value;
-                                      _selectedSubDepartmentAr = null;
-                                      final index = mainSectionsAr.indexOf(value!);
-                                      _selectedDepartmentFr = (school.mainSections['fr'] as List<dynamic>?)?[index] as String? ?? '';
-                                    });
-                                  },
-                                  validator: (value) => value == null ? 'مطلوب' : null,
-                                ),
-                                const SizedBox(height: 12),
-                                if (_selectedDepartmentAr != null && subSectionsAr[_selectedDepartmentAr] != null)
-                                  DropdownButtonFormField<String>(
-                                    decoration: _buildInputDecoration('القسم الفرعي'),
-                                    value: _selectedSubDepartmentAr,
-                                    items: subSectionsAr[_selectedDepartmentAr]!.map((subDepartment) => DropdownMenuItem(value: subDepartment, child: Text(subDepartment))).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedSubDepartmentAr = value;
-                                        final index = subSectionsAr[_selectedDepartmentAr]!.indexOf(value!);
-                                        _selectedSubDepartmentFr = (school.subSections['fr'] as Map<String, dynamic>?)?[_selectedDepartmentFr]?[index] as String?;
-                                      });
-                                    },
-                                    validator: (value) => value == null ? 'مطلوب' : null,
-                                  ),
-                              ],
-                            );
-                          }
-                          return const SizedBox();
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildSectionTitle('معلومات بالعربية'),
+                                    _buildTextField(label: 'الاسم الكامل', controller: _fullNameArController, textDirection: TextDirection.rtl),
+                                    const SizedBox(height: 12),
+                                    _buildTextField(label: 'العنوان', controller: _addressArController, textDirection: TextDirection.rtl),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('الجنس'),
+                                      value: _selectedGenderAr,
+                                      items: _genders.keys.map((gender) => DropdownMenuItem(value: gender, child: Text(gender))).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedGenderAr = value;
+                                          _selectedGenderFr = _genders[value];
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'مطلوب' : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('القسم الرئيسي'),
+                                      value: _selectedDepartmentAr,
+                                      items: mainSectionsAr.map((dept) => DropdownMenuItem(value: dept, child: Text(dept))).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedDepartmentAr = value;
+                                          _selectedSubDepartmentAr = null;
+                                          final index = mainSectionsAr.indexOf(value!);
+                                          _selectedDepartmentFr = (school.mainSections['fr'] as List<dynamic>?)?[index] as String? ?? '';
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'مطلوب' : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (_selectedDepartmentAr != null && subSectionsAr[_selectedDepartmentAr] != null)
+                                      DropdownButtonFormField<String>(
+                                        decoration: _buildInputDecoration('القسم الفرعي'),
+                                        value: _selectedSubDepartmentAr,
+                                        items: subSectionsAr[_selectedDepartmentAr]!.map((subDept) => DropdownMenuItem(value: subDept, child: Text(subDept))).toList(),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _selectedSubDepartmentAr = value;
+                                            final index = subSectionsAr[_selectedDepartmentAr]!.indexOf(value!);
+                                            _selectedSubDepartmentFr = (school.subSections['fr'] as Map<String, dynamic>?)?[_selectedDepartmentFr]?[index] as String?;
+                                          });
+                                        },
+                                        validator: (value) => value == null ? 'مطلوب' : null,
+                                      ),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('فئة الراتب'),
+                                      value: _selectedSalaryCategoryAr,
+                                      items: salaryState.categories.map((category) {
+                                        return DropdownMenuItem(
+                                          value: category.categoryName,
+                                          child: Text(category.categoryName),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedSalaryCategoryAr = value;
+                                          final selectedCategory = salaryState.categories.firstWhere((cat) => cat.categoryName == value);
+                                          _selectedSalaryCategoryFr = selectedCategory.categoryNameFr;
+                                          _selectedSalaryCategoryId = selectedCategory.id;
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'مطلوب' : null,
+                                    ),
+                                  ],
+                                );
+                              }
+                              return const SizedBox();
+                            },
+                          );
                         },
                       ),
                     ),
@@ -501,82 +481,103 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
                         ],
                       ),
                       child: BlocBuilder<SchoolCubit, SchoolState>(
-                        builder: (context, state) {
-                          if (state is SchoolsLoaded) {
-                            final uniqueSchools = state.schools.toSet().toList();
-                            final school = uniqueSchools.firstWhere(
-                                  (s) => s.schoolId == _selectedSchoolId,
-                              orElse: () => uniqueSchools.first,
-                            );
+                        builder: (context, schoolState) {
+                          return BlocBuilder<SalaryCubit, SalaryState>(
+                            builder: (context, salaryState) {
+                              if (schoolState is SchoolsLoaded && salaryState is SalaryCategoriesLoaded && _selectedSchoolId != null) {
+                                final school = schoolState.schools.firstWhere(
+                                      (s) => s.schoolId == _selectedSchoolId,
+                                  orElse: () => schoolState.schools.first,
+                                );
+                                final mainSectionsFr = (school.mainSections['fr'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [];
+                                final subSectionsFr = (school.subSections['fr'] as Map<String, dynamic>?)?.map(
+                                      (key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList()),
+                                ) ?? {};
 
-                            final mainSectionsFr = (school.mainSections['fr'] as List<dynamic>?)
-                                ?.map((e) => e as String)
-                                .toList() ??
-                                [];
-                            final subSectionsFr = (school.subSections['fr'] as Map<String, dynamic>?)
-                                ?.map((key, value) => MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList())) ??
-                                {};
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionTitle('Informations en français'),
-                                _buildTextField(label: 'Nom complet', controller: _fullNameFrController),
-                                const SizedBox(height: 12),
-                                _buildTextField(label: 'Adresse', controller: _addressFrController),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  decoration: _buildInputDecoration('Genre'),
-                                  value: _selectedGenderFr,
-                                  items: _genders.values.map((gender) => DropdownMenuItem(value: gender, child: Text(gender))).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedGenderFr = value;
-                                      _selectedGenderAr = _genders.keys.firstWhere((k) => _genders[k] == value);
-                                    });
-                                  },
-                                  validator: (value) => value == null ? 'Requis' : null,
-                                ),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  decoration: _buildInputDecoration('Département principal'),
-                                  value: _selectedDepartmentFr,
-                                  items: mainSectionsFr.map((department) => DropdownMenuItem(value: department, child: Text(department))).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedDepartmentFr = value;
-                                      _selectedSubDepartmentFr = null;
-                                      final index = mainSectionsFr.indexOf(value!);
-                                      _selectedDepartmentAr = (school.mainSections['ar'] as List<dynamic>?)?[index] as String? ?? '';
-                                    });
-                                  },
-                                  validator: (value) => value == null ? 'Requis' : null,
-                                ),
-                                const SizedBox(height: 12),
-                                if (_selectedDepartmentFr != null && subSectionsFr[_selectedDepartmentFr] != null)
-                                  DropdownButtonFormField<String>(
-                                    decoration: _buildInputDecoration('Sous-département'),
-                                    value: _selectedSubDepartmentFr,
-                                    items: subSectionsFr[_selectedDepartmentFr]!.map((subDepartment) => DropdownMenuItem(value: subDepartment, child: Text(subDepartment))).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedSubDepartmentFr = value;
-                                        final index = subSectionsFr[_selectedDepartmentFr]!.indexOf(value!);
-                                        _selectedSubDepartmentAr = (school.subSections['ar'] as Map<String, dynamic>?)?[_selectedDepartmentAr]?[index] as String?;
-                                      });
-                                    },
-                                    validator: (value) => value == null ? 'Requis' : null,
-                                  ),
-                              ],
-                            );
-                          }
-                          return const SizedBox();
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildSectionTitle('Informations en français'),
+                                    _buildTextField(label: 'Nom complet', controller: _fullNameFrController),
+                                    const SizedBox(height: 12),
+                                    _buildTextField(label: 'Adresse', controller: _addressFrController),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('Genre'),
+                                      value: _selectedGenderFr,
+                                      items: _genders.values.map((gender) => DropdownMenuItem(value: gender, child: Text(gender))).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedGenderFr = value;
+                                          _selectedGenderAr = _genders.keys.firstWhere((k) => _genders[k] == value);
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'Requis' : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('Département principal'),
+                                      value: _selectedDepartmentFr,
+                                      items: mainSectionsFr.map((dept) => DropdownMenuItem(value: dept, child: Text(dept))).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedDepartmentFr = value;
+                                          _selectedSubDepartmentFr = null;
+                                          final index = mainSectionsFr.indexOf(value!);
+                                          _selectedDepartmentAr = (school.mainSections['ar'] as List<dynamic>?)?[index] as String? ?? '';
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'Requis' : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (_selectedDepartmentFr != null && subSectionsFr[_selectedDepartmentFr] != null)
+                                      DropdownButtonFormField<String>(
+                                        decoration: _buildInputDecoration('Sous-département'),
+                                        value: _selectedSubDepartmentFr,
+                                        items: subSectionsFr[_selectedDepartmentFr]!.map((subDept) => DropdownMenuItem(value: subDept, child: Text(subDept))).toList(),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _selectedSubDepartmentFr = value;
+                                            final index = subSectionsFr[_selectedDepartmentFr]!.indexOf(value!);
+                                            _selectedSubDepartmentAr = (school.subSections['ar'] as Map<String, dynamic>?)?[_selectedDepartmentAr]?[index] as String?;
+                                          });
+                                        },
+                                        validator: (value) => value == null ? 'Requis' : null,
+                                      ),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      decoration: _buildInputDecoration('Catégorie de salaire'),
+                                      value: _selectedSalaryCategoryFr,
+                                      items: salaryState.categories.map((category) {
+                                        return DropdownMenuItem(
+                                          value: category.categoryNameFr,
+                                          child: Text(category.categoryNameFr),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedSalaryCategoryFr = value;
+                                          final selectedCategory = salaryState.categories.firstWhere((cat) => cat.categoryNameFr == value);
+                                          _selectedSalaryCategoryAr = selectedCategory.categoryName;
+                                          _selectedSalaryCategoryId = selectedCategory.id;
+                                        });
+                                      },
+                                      validator: (value) => value == null ? 'Requis' : null,
+                                    ),
+                                  ],
+                                );
+                              }
+                              return const SizedBox();
+                            },
+                          );
                         },
                       ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              _buildModernPermissionsSelector(),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -589,12 +590,9 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     elevation: 5,
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'حفظ / Enregistrer',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                  child: const Text(
+                    'حفظ / Enregistrer',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -631,13 +629,14 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
     bool obscureText = false,
     TextDirection textDirection = TextDirection.ltr,
     bool isRequired = true,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       textDirection: textDirection,
       decoration: _buildInputDecoration(label),
-      validator: isRequired ? (value) => value!.isEmpty ? (textDirection == TextDirection.rtl ? 'مطلوب' : 'Requis') : null : null,
+      validator: validator ?? (isRequired ? (value) => value!.isEmpty ? 'مطلوب' : null : null),
     );
   }
 
@@ -666,152 +665,127 @@ class _AddEmployeeFormState extends State<AddEmployeeForm> {
     );
   }
 
-  Widget _buildPermissionsSelector() {
+  Widget _buildModernPermissionsSelector() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            blurRadius: 10,
-            spreadRadius: 2,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 5, blurRadius: 7),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // العنوان
-          Text(
-            'الصلاحيات / Permissions',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue[900],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'الصلاحيات / Permissions',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (_selectedPermissions.length == availablePermissions.length) {
+                      _selectedPermissions.clear();
+                    } else {
+                      _selectedPermissions = availablePermissions.keys.toList();
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _selectedPermissions.length == availablePermissions.length ? 'Annuler tout - إلغاء الكل' : 'تحديد الكل - Tout sélectionner',
+                    style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
-          // خيار "تحديد الكل"
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue[700]!, Colors.blue[500]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: CheckboxListTile(
-              title: Text(
-                'تحديد الكل / Sélectionner tout',
-                style: GoogleFonts.cairo(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              value: _selectedPermissions.length == availablePermissions.length,
-              activeColor: Colors.white,
-              checkColor: Colors.blue[900],
-              onChanged: (bool? selected) {
-                setState(() {
-                  if (selected != null) {
-                    if (selected) {
-                      _selectedPermissions.clear();
-                      _selectedPermissions.addAll(availablePermissions.keys);
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: availablePermissions.entries.map((entry) {
+              final isSelected = _selectedPermissions.contains(entry.key);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedPermissions.remove(entry.key);
                     } else {
-                      _selectedPermissions.clear();
+                      _selectedPermissions.add(entry.key);
                     }
-                  }
-                });
-              },
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const Divider(color: Colors.grey, height: 20),
-          // قائمة الصلاحيات الفردية
-          ...availablePermissions.entries.map((entry) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: _selectedPermissions.contains(entry.key)
-                      ? Colors.blue[50]
-                      : Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _selectedPermissions.contains(entry.key)
-                        ? Colors.blue[700]!
-                        : Colors.grey[300]!,
-                    width: 1,
-                  ),
-                ),
-                child: CheckboxListTile(
-                  title: Text(
-                    entry.value,
-                    style: GoogleFonts.cairo(
-                      color: Colors.black87,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isSelected
+                          ? [Colors.blueAccent.shade100, Colors.blueAccent.shade400]
+                          : [Colors.grey.shade100, Colors.grey.shade200],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: isSelected ? Colors.blueAccent : Colors.grey.shade300,
+                      width: 1.5,
                     ),
                   ),
-                  value: _selectedPermissions.contains(entry.key),
-                  activeColor: Colors.blue[700],
-                  checkColor: Colors.white,
-                  onChanged: (bool? selected) {
-                    setState(() {
-                      if (selected != null) {
-                        if (selected) {
-                          _selectedPermissions.add(entry.key);
-                        } else {
-                          _selectedPermissions.remove(entry.key);
-                        }
-                      }
-                    });
-                  },
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          border: Border.all(color: isSelected ? Colors.blueAccent : Colors.grey.shade400, width: 2),
+                        ),
+                        child: isSelected
+                            ? const Icon(Icons.check, size: 12, color: Colors.blueAccent)
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          entry.value,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.black87,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }).toList(),
-        ],
-      ),
-    );
-  }  Widget _buildSalaryCategoryDropdown() {
-    return BlocBuilder<SalaryCubit, SalaryState>(
-      builder: (context, state) {
-        if (state is SalaryCategoriesLoaded) {
-          if (state.categories.isEmpty) {
-            return const Text('لا توجد فئات رواتب متاحة لهذه المدرسة');
-          }
-          return DropdownButtonFormField<String>(
-            decoration: _buildInputDecoration('فئة الراتب / Catégorie de salaire'),
-            value: _selectedSalaryCategoryId,
-            items: state.categories.map((category) {
-              return DropdownMenuItem(
-                value: category.id,
-                child: Text(category.categoryName),
               );
             }).toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedSalaryCategoryId = value;
-              });
-            },
-            validator: (value) => value == null ? 'مطلوب اختيار فئة راتب' : null,
-          );
-        } else if (state is SalaryError) {
-          return Text('خطأ: ${state.message}');
-        }
-        return const CircularProgressIndicator();
-      },
+          ),
+        ],
+      ),
     );
   }
 

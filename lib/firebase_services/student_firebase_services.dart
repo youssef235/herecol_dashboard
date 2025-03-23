@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:school_management_dashboard/models/fee_structure_model.dart';
 import '../models/Payment.dart';
 import '../models/student_model.dart';
 
 class StudentFirebaseServices {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   Future<String> generateStudentId(String schoolId, String academicYear) async {
     final yearPrefix = academicYear.split('-')[0].substring(2);
@@ -18,13 +20,59 @@ class StudentFirebaseServices {
     return '$yearPrefix${studentCount.toString().padLeft(4, '0')}'; // e.g., 250001
   }
 
+  Future<void> updatePayment({
+    required String schoolId,
+    required String studentId,
+    required Payment payment,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('students')
+          .doc(studentId)
+          .collection('payments')
+          .doc(payment.id)
+          .update(payment.toFirestore());
+    } catch (e) {
+      throw Exception("خطأ في تعديل الدفع: $e");
+    }
+  }
+
+  Future<void> deletePayment({
+    required String schoolId,
+    required String studentId,
+    required String paymentId,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('students')
+          .doc(studentId)
+          .collection('payments')
+          .doc(paymentId)
+          .delete();
+    } catch (e) {
+      throw Exception("خطأ في حذف الدفع: $e");
+    }
+  }
+
   Future<void> addStudent(Student student) async {
+    // جلب FeeStructure بناءً على الصف
+    final feeStructure = await getFeeStructureForStudent(student.schoolId, student.gradeAr);
+    final totalFeesDue = feeStructure?.installments.fold<double>(0, (sum, i) => sum + i.amount) ?? 0.0;
+
+    // إضافة totalFeesDue إلى بيانات الطالب
+    final studentData = student.toFirestore();
+    studentData['totalFeesDue'] = totalFeesDue;
+
     await _firestore
         .collection('schools')
         .doc(student.schoolId)
         .collection('students')
         .doc(student.id)
-        .set(student.toFirestore());
+        .set(studentData);
   }
 
   Future<List<Student>> getSchoolStudents(String schoolId) async {
@@ -34,32 +82,46 @@ class StudentFirebaseServices {
           .doc(schoolId)
           .collection('students')
           .get();
-      return snapshot.docs.map((doc) {
-        return Student.fromFirestore(doc.data() as Map<String, dynamic>, doc.id);
+      // Map each document to a Future<Student> and collect them into a List<Future<Student>>
+      List<Future<Student>> studentFutures = snapshot.docs.map((doc) async {
+        final data = doc.data() as Map<String, dynamic>;
+        final feeStructure = await getFeeStructureForStudent(schoolId, data['gradeAr']);
+        return Student.fromFirestore(data, doc.id, feeStructure);
       }).toList();
+
+      // Use Future.wait to wait for all futures to complete and return a List<Student>
+      return await Future.wait(studentFutures);
     } catch (e) {
       throw Exception("خطأ في تحميل الطلاب: $e");
     }
   }
-
   Stream<List<Student>> streamSchoolStudents(String schoolId) {
     return _firestore
         .collection('schools')
         .doc(schoolId)
         .collection('students')
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return Student.fromFirestore(doc.data(), doc.id);
-      }).toList();
+        .asyncMap((snapshot) async {
+      final students = <Student>[];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final feeStructure = await getFeeStructureForStudent(schoolId, data['gradeAr']);
+        students.add(Student.fromFirestore(data, doc.id, feeStructure));
+      }
+      return students;
     });
   }
 
   Stream<List<Student>> streamAllStudents() {
-    return _firestore.collectionGroup('students').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return Student.fromFirestore(doc.data(), doc.id);
-      }).toList();
+    return _firestore.collectionGroup('students').snapshots().asyncMap((snapshot) async {
+      final students = <Student>[];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final schoolId = data['schoolId'];
+        final feeStructure = await getFeeStructureForStudent(schoolId, data['gradeAr']);
+        students.add(Student.fromFirestore(data, doc.id, feeStructure));
+      }
+      return students;
     });
   }
 
@@ -77,6 +139,26 @@ class StudentFirebaseServices {
     return null;
   }
 
+  Future<void> updateStudentFees({
+    required String schoolId,
+    required String studentId,
+    required double totalFeesDue,
+    required double feesPaid,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('students')
+          .doc(studentId)
+          .update({
+        'totalFeesDue': totalFeesDue,
+        'feesPaid': feesPaid,
+      });
+    } catch (e) {
+      throw Exception("خطأ في تحديث المصاريف: $e");
+    }
+  }
   Future<void> updateStudentAttendance({
     required String schoolId,
     required String studentId,
@@ -97,26 +179,6 @@ class StudentFirebaseServices {
     }
   }
 
-  Future<void> updateStudentFees({
-    required String schoolId,
-    required String studentId,
-    required double feesDue,
-    required double feesPaid,
-  }) async {
-    try {
-      await _firestore
-          .collection('schools')
-          .doc(schoolId)
-          .collection('students')
-          .doc(studentId)
-          .update({
-        'feesDue': feesDue,
-        'feesPaid': feesPaid,
-      });
-    } catch (e) {
-      throw Exception("خطأ في تحديث المصاريف: $e");
-    }
-  }
 
   Future<Student> getStudentById({
     required String schoolId,
@@ -145,12 +207,32 @@ class StudentFirebaseServices {
     required String studentId,
   }) async {
     try {
-      await _firestore
+      // جلب بيانات الطالب للحصول على رابط الصورة
+      final studentDoc = await _firestore
           .collection('schools')
           .doc(schoolId)
           .collection('students')
           .doc(studentId)
-          .delete();
+          .get();
+
+      if (studentDoc.exists) {
+        final studentData = studentDoc.data() as Map<String, dynamic>;
+        final profileImageUrl = studentData['profileImage'] as String?;
+
+        // حذف الصورة من Firebase Storage إذا كانت موجودة
+        if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+          final storageRef = _storage.refFromURL(profileImageUrl);
+          await storageRef.delete();
+        }
+
+        // حذف بيانات الطالب من Firestore
+        await _firestore
+            .collection('schools')
+            .doc(schoolId)
+            .collection('students')
+            .doc(studentId)
+            .delete();
+      }
     } catch (e) {
       throw Exception("خطأ في حذف الطالب: $e");
     }
@@ -240,6 +322,22 @@ class StudentFirebaseServices {
       }).toList();
     } catch (e) {
       throw Exception("خطأ في جلب هياكل المصاريف: $e");
+    }
+  }
+
+  Future<void> updateFeeStructure({
+    required String schoolId,
+    required FeeStructure feeStructure,
+  }) async {
+    try {
+      await _firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('feeStructures')
+          .doc(feeStructure.id)
+          .update(feeStructure.toFirestore());
+    } catch (e) {
+      throw Exception("خطأ في تحديث هيكل المصاريف: $e");
     }
   }
 }

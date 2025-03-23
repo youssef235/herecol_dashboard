@@ -7,8 +7,6 @@ import '../../cubit/school_info/school_info_cubit.dart';
 import '../../cubit/school_info/school_info_state.dart';
 import '../../cubit/student/student_cubit.dart';
 
-
-
 class FeesManagementScreen extends StatefulWidget {
   final String? schoolId;
 
@@ -20,6 +18,7 @@ class FeesManagementScreen extends StatefulWidget {
 
 class _FeesManagementScreenState extends State<FeesManagementScreen> {
   String? selectedSchoolId;
+  String selectedLanguage = 'ar'; // اللغة الافتراضية: العربية
 
   @override
   void initState() {
@@ -27,15 +26,12 @@ class _FeesManagementScreenState extends State<FeesManagementScreen> {
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
       if (authState.role == 'school') {
-        // إذا كان المستخدم مدرسة، استخدم uid كـ schoolId
         selectedSchoolId = widget.schoolId ?? authState.uid;
         context.read<StudentCubit>().streamStudents(schoolId: selectedSchoolId!);
       } else if (authState.role == 'admin') {
-        // إذا كان المستخدم admin، جلب جميع المدارس وجميع الطلاب
         context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
         context.read<StudentCubit>().streamAllStudents();
       } else if (authState.role == 'employee') {
-        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
         selectedSchoolId = authState.schoolId;
         if (selectedSchoolId != null) {
           context.read<StudentCubit>().streamStudents(schoolId: selectedSchoolId!);
@@ -48,14 +44,55 @@ class _FeesManagementScreenState extends State<FeesManagementScreen> {
   Widget build(BuildContext context) {
     final authState = context.read<AuthCubit>().state;
     if (authState is! AuthAuthenticated) {
-      return const Scaffold(body: Center(child: Text('يرجى تسجيل الدخول')));
+      return Scaffold(
+        body: Center(
+          child: Text(
+            selectedLanguage == 'ar' ? 'يرجى تسجيل الدخول' : 'Veuillez vous connecter',
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إدارة المصاريف / Gestion des frais', style: TextStyle(color: Colors.white)),
+        title: Text(
+          selectedLanguage == 'ar' ? 'إدارة المصاريف' : 'Gestion des frais',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
+        actions: [
+          // زر اختيار اللغة
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButton<String>(
+              value: selectedLanguage,
+              icon: const Icon(Icons.language, color: Colors.white),
+              underline: const SizedBox(),
+              dropdownColor: Colors.white,
+              items: [
+                DropdownMenuItem(
+                  value: 'ar',
+                  child: Text('العربية', style: const TextStyle(color: Colors.blueAccent)),
+                ),
+                DropdownMenuItem(
+                  value: 'fr',
+                  child: Text('Français', style: const TextStyle(color: Colors.blueAccent)),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  selectedLanguage = value!;
+                });
+              },
+            ),
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -71,60 +108,70 @@ class _FeesManagementScreenState extends State<FeesManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (authState.role == 'admin')
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        spreadRadius: 5,
-                        blurRadius: 7,
-                      ),
-                    ],
-                  ),
-                  child: BlocBuilder<SchoolCubit, SchoolState>(
-                    builder: (context, schoolState) {
-                      if (schoolState is SchoolsLoaded) {
-                        if (selectedSchoolId == null && schoolState.schools.isNotEmpty) {
-                          selectedSchoolId = schoolState.schools.first.schoolId;
-                          context.read<StudentCubit>().streamStudents(schoolId: selectedSchoolId!);
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildSectionTitle('اختيار المدرسة / Choisir l’école'),
-                            DropdownButtonFormField<String>(
-                              decoration: _buildInputDecoration('المدرسة / École'),
-                              value: selectedSchoolId,
-                              items: schoolState.schools.map((school) {
-                                return DropdownMenuItem(
-                                  value: school.schoolId,
-                                  child: Text('${school.schoolName['ar'] ?? ''} / ${school.schoolName['fr'] ?? ''}'),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedSchoolId = value;
-                                  if (value != null) {
-                                    context.read<StudentCubit>().streamStudents(schoolId: value);
-                                  }
-                                });
-                              },
-                              validator: (value) => value == null ? 'مطلوب' : null,
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: BlocBuilder<SchoolCubit, SchoolState>(
+                      builder: (context, schoolState) {
+                        if (schoolState is SchoolsLoaded) {
+                          if (selectedSchoolId == null && schoolState.schools.isNotEmpty) {
+                            selectedSchoolId = schoolState.schools.first.schoolId;
+                            context.read<StudentCubit>().streamStudents(schoolId: selectedSchoolId!);
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionTitle(
+                                selectedLanguage == 'ar' ? 'اختيار المدرسة' : 'Choisir l’école',
+                              ),
+                              DropdownButtonFormField<String>(
+                                decoration: _buildInputDecoration(
+                                  selectedLanguage == 'ar' ? 'المدرسة' : 'École',
+                                ),
+                                value: selectedSchoolId,
+                                items: schoolState.schools.map((school) {
+                                  return DropdownMenuItem(
+                                    value: school.schoolId,
+                                    child: Text(
+                                      selectedLanguage == 'ar'
+                                          ? school.schoolName['ar'] ?? ''
+                                          : school.schoolName['fr'] ?? '',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedSchoolId = value;
+                                    if (value != null) {
+                                      context.read<StudentCubit>().streamStudents(schoolId: value);
+                                    }
+                                  });
+                                },
+                                validator: (value) => value == null
+                                    ? (selectedLanguage == 'ar' ? 'مطلوب' : 'Requis')
+                                    : null,
+                              ),
+                            ],
+                          );
+                        } else if (schoolState is SchoolError) {
+                          return Center(
+                            child: Text(
+                              schoolState.message,
+                              style: const TextStyle(color: Colors.red),
                             ),
-                          ],
-                        );
-                      } else if (schoolState is SchoolError) {
-                        return Center(child: Text(schoolState.message));
-                      }
-                      return const Center(child: CircularProgressIndicator());
-                    },
+                          );
+                        }
+                        return const Center(child: CircularProgressIndicator());
+                      },
+                    ),
                   ),
                 ),
               const SizedBox(height: 24),
-              if (selectedSchoolId != null) StudentsListScreen(schoolId: selectedSchoolId!),
+              if (selectedSchoolId != null)
+                StudentsListScreen(schoolId: selectedSchoolId!, language: selectedLanguage),
             ],
           ),
         ),
@@ -135,23 +182,38 @@ class _FeesManagementScreenState extends State<FeesManagementScreen> {
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      labelStyle: const TextStyle(color: Colors.blueAccent),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.blueAccent),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
+      ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: Colors.white.withOpacity(0.9),
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      prefixIcon: const Icon(Icons.school, color: Colors.blueAccent),
     );
   }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: Colors.blueAccent,
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.bookmark, color: Colors.blueAccent, size: 28),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueAccent,
+            ),
+          ),
+        ],
       ),
     );
   }

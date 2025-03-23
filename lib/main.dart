@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:school_management_dashboard/screens/Employee/SalaryCategoriesScreen.dart';
-import 'package:school_management_dashboard/screens/Employee/SalaryTrackingScreen.dart';
-import 'package:school_management_dashboard/screens/payment/FeesManagementScreen.dart';
-import 'package:school_management_dashboard/screens/payment/LatePaymentsScreen.dart';
-import 'package:school_management_dashboard/screens/student/add_student_screen.dart';
+import 'package:school_management_dashboard/screens/parent/AddParentScreen.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:school_management_dashboard/cubit/auth/auth_cubit.dart';
+import 'package:school_management_dashboard/cubit/auth/auth_state.dart';
 import 'package:school_management_dashboard/cubit/student/student_cubit.dart';
+import 'package:school_management_dashboard/cubit/parent/parent_cubit.dart';
+import 'package:school_management_dashboard/cubit/school_info/school_info_cubit.dart';
+import 'package:school_management_dashboard/cubit/stats/state_cubit.dart';
+import 'package:school_management_dashboard/cubit/Employee/EmployeeCubit.dart';
+import 'package:school_management_dashboard/cubit/salary/salary_cubit.dart';
 import 'package:school_management_dashboard/firebase_services/school_info_firebase_services.dart';
 import 'package:school_management_dashboard/firebase_services/stats_firebase_services.dart';
 import 'package:school_management_dashboard/firebase_services/student_firebase_services.dart';
+import 'package:school_management_dashboard/firebase_services/parent_firebase_services.dart';
+import 'package:school_management_dashboard/firebase_services/employee_firebase_services.dart';
+import 'package:school_management_dashboard/firebase_services/SalaryFirebaseServices.dart';
+import 'package:school_management_dashboard/screens/auth/login_screen.dart';
+import 'package:school_management_dashboard/screens/stats/stats_screen.dart';
 import 'package:school_management_dashboard/screens/school_info/AddSchoolScreen.dart';
 import 'package:school_management_dashboard/screens/school_info/school_info_screen.dart';
-import 'package:school_management_dashboard/screens/stats/stats_screen.dart';
-import 'package:school_management_dashboard/cubit/school_info/school_info_cubit.dart';
-import 'package:school_management_dashboard/cubit/stats/state_cubit.dart';
-import 'package:school_management_dashboard/cubit/auth/auth_cubit.dart';
-import 'package:school_management_dashboard/screens/auth/login_screen.dart';
-import 'cubit/Employee/EmployeeCubit.dart';
-import 'cubit/auth/auth_state.dart';
-import 'cubit/salary/salary_cubit.dart';
-import 'firebase_services/SalaryFirebaseServices.dart';
-import 'firebase_services/employee_firebase_services.dart';
-
+import 'package:school_management_dashboard/screens/student/add_student_screen.dart';
+import 'package:school_management_dashboard/screens/Employee/SalaryCategoriesScreen.dart';
+import 'package:school_management_dashboard/screens/Employee/SalaryTrackingScreen.dart';
+import 'package:school_management_dashboard/screens/payment/FeesManagementScreen.dart';
+import 'package:school_management_dashboard/screens/payment/LatePaymentsScreen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +45,7 @@ Future<void> main() async {
 
   await windowManager.ensureInitialized();
 
-  runApp(MyApp());
+  runApp(const MyApp());
 
   await Future.delayed(const Duration(milliseconds: 500));
   await windowManager.waitUntilReadyToShow(
@@ -62,6 +64,8 @@ Future<void> main() async {
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
@@ -69,9 +73,10 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (context) => AuthCubit(FirebaseAuth.instance, FirebaseFirestore.instance)),
         BlocProvider(create: (context) => StatsCubit(StatsFirebaseServices())),
         BlocProvider(create: (context) => StudentCubit(StudentFirebaseServices())),
+        BlocProvider(create: (context) => ParentCubit(ParentFirebaseServices())), // Add ParentCubit
         BlocProvider(create: (context) => SchoolCubit(SchoolFirebaseServices())),
         BlocProvider(create: (context) => EmployeeCubit(EmployeeFirebaseServices())),
-        BlocProvider(create: (context) => SalaryCubit(SalaryFirebaseServices())), // إضافة SalaryCubit
+        BlocProvider(create: (context) => SalaryCubit(SalaryFirebaseServices())),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -80,20 +85,24 @@ class MyApp extends StatelessWidget {
         home: BlocBuilder<AuthCubit, AuthState>(
           builder: (context, state) {
             if (state is AuthAuthenticated) {
-              return StatsScreen();
+              return  StatsScreen();
             }
-            return LoginScreen();
+            return  LoginScreen();
           },
         ),
         routes: {
-          '/stats': (context) => StatsScreen(),
+          '/stats': (context) =>  StatsScreen(),
           '/add_student': (context) => AddStudentScreen(
             role: (context.read<AuthCubit>().state as AuthAuthenticated).role,
             uid: (context.read<AuthCubit>().state as AuthAuthenticated).uid,
           ),
-          '/school_info': (context) => SchoolInfoScreen(),
-          '/login': (context) => LoginScreen(),
-          '/signup': (context) => AddSchoolScreen(),
+          '/add_parent': (context) => AddParentScreen( // Add route for AddParentScreen
+            role: (context.read<AuthCubit>().state as AuthAuthenticated).role,
+            uid: (context.read<AuthCubit>().state as AuthAuthenticated).uid,
+          ),
+          '/school_info': (context) =>  SchoolInfoScreen(),
+          '/login': (context) =>  LoginScreen(),
+          '/signup': (context) =>  AddSchoolScreen(),
           '/fees_management': (context) {
             final authState = context.read<AuthCubit>().state as AuthAuthenticated;
             return FeesManagementScreen(

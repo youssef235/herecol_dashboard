@@ -15,6 +15,7 @@ import 'package:school_management_dashboard/cubit/student/student_cubit.dart';
 import 'package:school_management_dashboard/cubit/student/student_state.dart';
 import 'package:school_management_dashboard/screens/student/student_details_screen.dart';
 import '../../models/school_info_model.dart';
+import '../../models/student_model.dart';
 
 class StudentListScreen extends StatefulWidget {
   final String? schoolId;
@@ -43,16 +44,13 @@ class _StudentListScreenState extends State<StudentListScreen> {
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
       if (authState.role == 'admin') {
-        // إذا كان المستخدم admin، جلب جميع المدارس وجميع الطلاب
         context.read<SchoolCubit>().fetchSchools(authState.uid, authState.role);
         context.read<StudentCubit>().fetchAllStudents();
       } else if (authState.role == 'school') {
-        // إذا كان المستخدم مدرسة، استخدم uid أو schoolId الممرر كـ selectedSchoolId
         selectedSchoolId = widget.schoolId ?? authState.uid;
         context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, authState.role);
         context.read<StudentCubit>().fetchStudents(schoolId: selectedSchoolId!, language: _selectedLanguage);
       } else if (authState.role == 'employee') {
-        // إذا كان المستخدم موظفًا، استخدم schoolId من حالة المصادقة
         selectedSchoolId = authState.schoolId;
         if (selectedSchoolId != null) {
           context.read<SchoolCubit>().fetchSchools(selectedSchoolId!, 'school');
@@ -61,6 +59,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
       }
     }
   }
+
   void _filterStudents() {
     final authState = context.read<AuthCubit>().state;
     if (authState is AuthAuthenticated) {
@@ -79,7 +78,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
 
   Future<void> _generateAndSavePdf(List<Map<String, String>> studentData) async {
     final pdf = pw.Document();
-    final font = await PdfGoogleFonts.robotoRegular(); // خط فرنسي
+    final font = await PdfGoogleFonts.robotoRegular();
     final maliFlagImage = pw.MemoryImage(
       (await rootBundle.load('assets/images/mali.png')).buffer.asUint8List(),
     );
@@ -124,11 +123,10 @@ class _StudentListScreenState extends State<StudentListScreen> {
       _progressNotifier.value = 0.5 + (i + 1) / studentData.length * 0.5;
     }
 
-    // بناء البطاقة
     pw.Widget buildCard(int index) {
       final student = studentData[index];
       return pw.Container(
-        width: (PdfPageFormat.a4.width - 80) / 2, // تقليل العرض قليلاً مع هامش إضافي
+        width: (PdfPageFormat.a4.width - 80) / 2,
         height: _calculateCardHeight(student),
         margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
         padding: const pw.EdgeInsets.all(8),
@@ -204,23 +202,23 @@ class _StudentListScreenState extends State<StudentListScreen> {
       );
     }
 
-    final int cardsPerPage = 8; // 4 صفوف، كل صف يحتوي على بطاقتين
+    final int cardsPerPage = 8;
     for (int pageIndex = 0; pageIndex < (studentData.length / cardsPerPage).ceil(); pageIndex++) {
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(20), // هامش خارجي للصفحة
+          margin: const pw.EdgeInsets.all(20),
           build: (pw.Context context) {
             List<pw.Widget> rows = [];
             for (var i = pageIndex * cardsPerPage; i < (pageIndex + 1) * cardsPerPage && i < studentData.length; i += 2) {
               final leftCard = buildCard(i);
               final rightCard = (i + 1 < studentData.length && i + 1 < (pageIndex + 1) * cardsPerPage)
                   ? buildCard(i + 1)
-                  : pw.SizedBox(width: (PdfPageFormat.a4.width - 80) / 2); // مساحة فارغة إذا لم تكن هناك بطاقة ثانية
+                  : pw.SizedBox(width: (PdfPageFormat.a4.width - 80) / 2);
 
               rows.add(
                 pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.center, // توسيط البطاقات في الصف
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
                   children: [leftCard, rightCard],
                 ),
               );
@@ -250,6 +248,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
     }
     _progressNotifier.value = 1.0;
   }
+
   Future<void> _generateNamesListPdf(List<Map<String, String>> studentData) async {
     final pdf = pw.Document();
     final arabicFont = await pw.Font.ttf((await rootBundle.load('assets/fonts/Amiri-Regular.ttf')).buffer.asByteData());
@@ -276,8 +275,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
           classes: {'fr': [], 'ar': []},
           sections: {'fr': {}, 'ar': {}},
           categories: {'fr': [], 'ar': []},
-          mainSections: {'fr': [], 'ar': []}, // إضافة mainSections
-          subSections: {'fr': {}, 'ar': {}},   // إضافة subSections
+          mainSections: {'fr': [], 'ar': []},
+          subSections: {'fr': {}, 'ar': {}},
           principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
         ),
       );
@@ -454,7 +453,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
   }
 
   double _calculateCardHeight(Map<String, String> student) {
-    double height = 80; // تقليل الارتفاع الأساسي لتناسب بطاقتين
+    double height = 80;
     final dataLines = [
       'C.A.P de : ${student['addressFr'] ?? 'Non disponible'}',
       'École : ${student['schoolNameFr'] ?? 'Non disponible'}',
@@ -464,22 +463,75 @@ class _StudentListScreenState extends State<StudentListScreen> {
       'Né(e) le : ${student['birthDate'] ?? 'Non disponible'}',
       'Classe : ${student['gradeFr'] ?? 'Non disponible'}',
     ];
-    const double lineHeight = 10; // تقليل ارتفاع السطر لتناسب التصميم
+    const double lineHeight = 10;
     height += dataLines.length * lineHeight;
-    height += 20; // تقليل الهامش الإضافي
+    height += 20;
     return height;
+  }
+
+  void _confirmDelete(BuildContext context, Student student) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(_selectedLanguage == 'ar' ? 'تأكيد الحذف' : 'Confirmer la suppression'),
+          content: Text(_selectedLanguage == 'ar'
+              ? 'هل أنت متأكد من حذف الطالب ${student.firstNameAr} ${student.lastNameAr}؟'
+              : 'Êtes-vous sûr de vouloir supprimer l\'étudiant ${student.firstNameFr} ${student.lastNameFr} ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(_selectedLanguage == 'ar' ? 'إلغاء' : 'Annuler'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _deleteStudent(context, student);
+              },
+              child: Text(_selectedLanguage == 'ar' ? 'حذف' : 'Supprimer', style: const TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteStudent(BuildContext context, Student student) async {
+    try {
+       context.read<StudentCubit>().deleteStudent(
+        schoolId: student.schoolId,
+        studentId: student.id,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_selectedLanguage == 'ar' ? 'تم حذف الطالب بنجاح' : 'Étudiant supprimé avec succès'),
+        ),
+      );
+      _loadInitialData();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_selectedLanguage == 'ar' ? 'فشل في حذف الطالب: $e' : 'Échec de la suppression: $e'),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = context.read<AuthCubit>().state;
     if (authState is! AuthAuthenticated) {
-      return const Scaffold(body: Center(child: Text('يرجى تسجيل الدخول / Veuillez vous connecter')));
+      return const Scaffold(
+        body: Center(child: Text('يرجى تسجيل الدخول / Veuillez vous connecter')),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('قائمة الطلاب / Liste des étudiants', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'قائمة الطلاب / Liste des étudiants',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
         actions: [
@@ -534,8 +586,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       classes: {'fr': [], 'ar': []},
                       sections: {'fr': {}, 'ar': {}},
                       categories: {'fr': [], 'ar': []},
-                      mainSections: {'fr': [], 'ar': []}, // إضافة mainSections
-                      subSections: {'fr': {}, 'ar': {}},   // إضافة subSections
+                      mainSections: {'fr': [], 'ar': []},
+                      subSections: {'fr': {}, 'ar': {}},
                       principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
                     ),
                   );
@@ -549,8 +601,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                     'gradeAr': student.gradeAr ?? '',
                     'sectionFr': student.sectionFr ?? '',
                     'sectionAr': student.sectionAr ?? '',
-                    'schoolName': school.schoolName[_selectedLanguage] ?? 'غير متوفر', // لكشف الأسماء
-                    'schoolNameFr': school.schoolName['fr'] ?? 'Non disponible', // لكروت الطلاب
+                    'schoolName': school.schoolName[_selectedLanguage] ?? 'غير متوفر',
+                    'schoolNameFr': school.schoolName['fr'] ?? 'Non disponible',
                     'addressFr': school.address['fr'] ?? 'Non disponible',
                     'birthDate': student.birthDate ?? '',
                     'profileImage': student.profileImage ?? '',
@@ -615,8 +667,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       classes: {'fr': [], 'ar': []},
                       sections: {'fr': {}, 'ar': {}},
                       categories: {'fr': [], 'ar': []},
-                      mainSections: {'fr': [], 'ar': []}, // Added required mainSections
-                      subSections: {'fr': {}, 'ar': {}},   // Added required subSections
+                      mainSections: {'fr': [], 'ar': []},
+                      subSections: {'fr': {}, 'ar': {}},
                       principalName: {'fr': 'غير متوفر', 'ar': 'غير متوفر'},
                     ),
                   );
@@ -630,8 +682,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                     'gradeAr': student.gradeAr ?? '',
                     'sectionFr': student.sectionFr ?? '',
                     'sectionAr': student.sectionAr ?? '',
-                    'schoolName': school.schoolName[_selectedLanguage] ?? 'غير متوفر', // لكشف الأسماء
-                    'schoolNameFr': school.schoolName['fr'] ?? 'Non disponible', // لكروت الطلاب
+                    'schoolName': school.schoolName[_selectedLanguage] ?? 'غير متوفر',
+                    'schoolNameFr': school.schoolName['fr'] ?? 'Non disponible',
                     'addressFr': school.address['fr'] ?? 'Non disponible',
                     'birthDate': student.birthDate ?? '',
                     'profileImage': student.profileImage ?? '',
@@ -647,13 +699,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blueAccent.shade100, Colors.white],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+        color: Colors.grey.shade100,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -674,6 +720,11 @@ class _StudentListScreenState extends State<StudentListScreen> {
                         });
                       }
                     },
+                    selectedColor: Colors.blueAccent,
+                    backgroundColor: Colors.grey.shade300,
+                    labelStyle: TextStyle(
+                      color: _selectedLanguage == 'ar' ? Colors.white : Colors.black,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
@@ -688,6 +739,11 @@ class _StudentListScreenState extends State<StudentListScreen> {
                         });
                       }
                     },
+                    selectedColor: Colors.blueAccent,
+                    backgroundColor: Colors.grey.shade300,
+                    labelStyle: TextStyle(
+                      color: _selectedLanguage == 'fr' ? Colors.white : Colors.black,
+                    ),
                   ),
                 ],
               ),
@@ -695,18 +751,28 @@ class _StudentListScreenState extends State<StudentListScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: [
-                    BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 5, blurRadius: 7),
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 2,
+                      blurRadius: 5,
+                    ),
                   ],
                 ),
                 child: BlocBuilder<SchoolCubit, SchoolState>(
                   builder: (context, schoolState) {
                     if (schoolState is SchoolsLoaded) {
                       final schools = schoolState.schools;
+                      if (schools.isEmpty) {
+                        return const Center(child: Text('لا توجد مدارس متاحة / Aucune école disponible'));
+                      }
+
                       if (authState.role == 'school' && schools.isNotEmpty) {
                         selectedSchoolId ??= widget.schoolId ?? authState.uid;
+                      } else if (authState.role == 'employee' && schools.isNotEmpty) {
+                        selectedSchoolId ??= authState.schoolId;
                       }
 
                       return Column(
@@ -776,177 +842,206 @@ class _StudentListScreenState extends State<StudentListScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: [
-                    BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 5, blurRadius: 7),
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 2,
+                      blurRadius: 5,
+                    ),
                   ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildSectionTitle('قائمة الطلاب / Liste des étudiants'),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: _selectedLanguage == 'ar' ? 'ابحث بالاسم أو المعرف' : 'Rechercher par nom ou ID',
-                          prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Colors.blueAccent),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value;
-                          });
-                        },
-                      ),
+                    TextField(
+                      decoration: _buildInputDecoration('ابحث بالاسم أو المعرف / Rechercher par nom ou ID'),
+                      onChanged: (value) => setState(() => _searchQuery = value),
                     ),
+                    const SizedBox(height: 16),
                     BlocBuilder<StudentCubit, StudentState>(
                       builder: (context, state) {
                         if (state is StudentLoading) {
                           return const Center(child: CircularProgressIndicator());
-                        } else if (state is StudentsLoaded) {
-                          final students = state.students
-                              .where((student) =>
-                          (selectedSchoolId == null || student.schoolId == selectedSchoolId) &&
-                              (selectedGrade == null ||
-                                  (_selectedLanguage == 'ar' ? student.gradeAr : student.gradeFr) == selectedGrade) &&
-                              (selectedSection == null ||
-                                  (_selectedLanguage == 'ar' ? student.sectionAr : student.sectionFr) == selectedSection) &&
-                              (_searchQuery.isEmpty ||
-                                  student.id.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                                  '${student.firstNameAr} ${student.lastNameAr}'
-                                      .toLowerCase()
-                                      .contains(_searchQuery.toLowerCase()) ||
-                                  '${student.firstNameFr} ${student.lastNameFr}'
-                                      .toLowerCase()
-                                      .contains(_searchQuery.toLowerCase())))
-                              .toList();
+                        }
+                        if (state is StudentsLoaded) {
+                          final filteredStudents = state.students.where((student) {
+                            final name = _selectedLanguage == 'ar'
+                                ? '${student.firstNameAr} ${student.lastNameAr}'
+                                : '${student.firstNameFr} ${student.lastNameFr}';
+                            final grade = _selectedLanguage == 'ar' ? student.gradeAr : student.gradeFr;
+                            final section = _selectedLanguage == 'ar' ? student.sectionAr : student.sectionFr;
+                            return (student.id.contains(_searchQuery) || name.contains(_searchQuery)) &&
+                                (selectedSchoolId == null || student.schoolId == selectedSchoolId) &&
+                                (selectedGrade == null || grade == selectedGrade) &&
+                                (selectedSection == null || section == selectedSection);
+                          }).toList();
 
-                          if (students.isEmpty) {
-                            return Center(
-                                child: Text(_selectedLanguage == 'ar' ? 'لا يوجد طلاب' : 'Aucun étudiant trouvé'));
+                          if (filteredStudents.isEmpty) {
+                            return const Center(child: Text('لا يوجد طلاب / Aucun étudiant trouvé'));
                           }
 
-                          return ListView.builder(
+                          return GridView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: (students.length / 3).ceil(),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 5,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 0.8,
+                            ),
+                            itemCount: filteredStudents.length,
                             itemBuilder: (context, index) {
-                              final startIndex = index * 3;
-                              final endIndex = (startIndex + 3 < students.length) ? startIndex + 3 : students.length;
-                              final rowStudents = students.sublist(startIndex, endIndex);
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  children: rowStudents.asMap().entries.map((entry) {
-                                    final student = entry.value;
-                                    final isLast = entry.key == rowStudents.length - 1;
-
-                                    return Expanded(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: [Colors.blueAccent.shade100, Colors.white],
-                                                  begin: Alignment.topCenter,
-                                                  end: Alignment.bottomCenter,
-                                                ),
-                                                borderRadius: BorderRadius.circular(15),
-                                              ),
-                                              child: InkWell(
-                                                onTap: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => StudentDetailsScreen(
-                                                        studentId: student.id,
-                                                        schoolId: student.schoolId,
-                                                      ),
-                                                    ),
-                                                  ).then((_) {
-                                                    _loadInitialData();
-                                                  });
-                                                },
-                                                borderRadius: BorderRadius.circular(15),
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(12),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                                    children: [
-                                                      student.profileImage != null
-                                                          ? ClipRRect(
-                                                        borderRadius: BorderRadius.circular(10),
-                                                        child: Image.network(
-                                                          student.profileImage!,
-                                                          width: 80,
-                                                          height: 80,
-                                                          fit: BoxFit.cover,
-                                                        ),
-                                                      )
-                                                          : Container(
-                                                        width: 80,
-                                                        height: 80,
-                                                        decoration: BoxDecoration(
-                                                          borderRadius: BorderRadius.circular(10),
-                                                          color: Colors.grey[200],
-                                                        ),
-                                                        child: const Icon(Icons.person, size: 40, color: Colors.grey),
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      Text(
-                                                        _selectedLanguage == 'ar'
-                                                            ? '${student.firstNameAr} ${student.lastNameAr}'
-                                                            : '${student.firstNameFr} ${student.lastNameFr}',
-                                                        style: const TextStyle(
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.blueAccent,
-                                                        ),
-                                                        textAlign: TextAlign.center,
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      _buildInfoRow(
-                                                          _selectedLanguage == 'ar' ? 'المعرف' : 'ID', student.id),
-                                                      _buildInfoRow(
-                                                          _selectedLanguage == 'ar' ? 'الاسم الأول' : 'Prénom',
-                                                          _selectedLanguage == 'ar' ? student.firstNameAr : student.firstNameFr),
-                                                      _buildInfoRow(
-                                                          _selectedLanguage == 'ar' ? 'الصف' : 'Classe',
-                                                          _selectedLanguage == 'ar' ? student.gradeAr : student.gradeFr),
-                                                      _buildInfoRow(
-                                                          _selectedLanguage == 'ar' ? 'الشعبة' : 'Section',
-                                                          _selectedLanguage == 'ar' ? student.sectionAr : student.sectionFr),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
+                              final student = filteredStudents[index];
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => StudentDetailsScreen(
+                                        studentId: student.id,
+                                        schoolId: student.schoolId,
+                                      ),
+                                    ),
+                                  ).then((_) => _loadInitialData());
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  curve: Curves.easeInOut,
+                                  child: Card(
+                                    elevation: 5,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [Colors.blueAccent.withOpacity(0.1), Colors.white],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.grey.withOpacity(0.2),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 4),
                                           ),
-                                          if (!isLast) const SizedBox(width: 16),
                                         ],
                                       ),
-                                    );
-                                  }).toList(),
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+Row(
+
+  children: [
+    IconButton(
+  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+  onPressed: () => _confirmDelete(context, student),
+),],),
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.1),
+                                                      blurRadius: 8,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: CircleAvatar(
+                                                  radius: 50,
+                                                  backgroundImage: student.profileImage != null
+                                                      ? NetworkImage(student.profileImage!)
+                                                      : null,
+                                                  backgroundColor: Colors.grey.shade200,
+                                                  child: student.profileImage == null
+                                                      ? const Icon(Icons.person, size: 25, color: Colors.grey)
+                                                      : null,
+                                                ),
+                                              ),
+
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            _selectedLanguage == 'ar'
+                                                ? '${student.firstNameAr} ${student.lastNameAr}'
+                                                : '${student.firstNameFr} ${student.lastNameFr}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.black87,
+                                              fontFamily: 'Roboto',
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _selectedLanguage == 'ar' ? student.gradeAr : student.gradeFr ?? '',
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              color: Colors.grey,
+                                              fontWeight: FontWeight.bold,
+                                              fontFamily: 'Roboto',
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.perm_identity, size: 16, color: Colors.blueAccent),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                student.id,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  color: Colors.black87,
+                                                  fontFamily: 'Roboto',
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.class_, size: 16, color: Colors.blueAccent),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _selectedLanguage == 'ar' ? student.sectionAr : student.sectionFr ?? '',
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  color: Colors.black87,
+                                                  fontFamily: 'Roboto',
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               );
                             },
                           );
                         }
-                        return const Center(child: Text('خطأ في تحميل الطلاب / Erreur lors du chargement des étudiants'));
+                        return const Center(child: Text('خطأ في تحميل البيانات / Erreur lors du chargement des données'));
                       },
                     ),
                   ],
@@ -956,6 +1051,51 @@ class _StudentListScreenState extends State<StudentListScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.blueAccent),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide.none,
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Colors.blueAccent,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdown({
+    required String label,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      decoration: _buildInputDecoration(label),
+      value: value,
+      items: items,
+      onChanged: onChanged,
+      style: const TextStyle(color: Colors.black87),
+      dropdownColor: Colors.white,
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.blueAccent),
     );
   }
 
@@ -974,71 +1114,5 @@ class _StudentListScreenState extends State<StudentListScreen> {
         }
       }
     }
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700]),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdown({
-    required String label,
-    required String? value,
-    required List<DropdownMenuItem<String>> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blueAccent, width: 2),
-          ),
-          child: DropdownButton<String>(
-            value: value,
-            hint: Text('اختر $label / Choisir $label', style: const TextStyle(color: Colors.blueAccent)),
-            onChanged: onChanged,
-            items: items,
-            style: const TextStyle(color: Colors.blueAccent),
-            dropdownColor: Colors.white,
-            isExpanded: true,
-            underline: const SizedBox(),
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.blueAccent),
-          ),
-        ),
-      ],
-    );
   }
 }

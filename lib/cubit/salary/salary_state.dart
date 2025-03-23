@@ -24,7 +24,11 @@ class SalaryPaymentsLoaded extends SalaryState {
 
 class SalaryPaid extends SalaryState {}
 
-class SalaryCategoryAdded extends SalaryState {} // حالة جديدة
+class SalaryCategoryAdded extends SalaryState {}
+
+class SalaryCategoryUpdated extends SalaryState {}
+
+class SalaryCategoryDeleted extends SalaryState {}
 
 class SalaryError extends SalaryState {
   final String message;

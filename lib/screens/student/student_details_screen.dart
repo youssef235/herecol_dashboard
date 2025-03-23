@@ -164,7 +164,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
           birthPlaceAr: _birthPlaceArController.text,
           birthPlaceFr: _birthPlaceFrController.text.isEmpty ? null : _birthPlaceFrController.text,
           profileImage: _profileImageUrl ?? student.profileImage,
-          feesDue: double.tryParse(_feesDueController.text.replaceAll(',', '')) ?? 0.0,
+          totalFeesDue: double.tryParse(_feesDueController.text.replaceAll(',', '')) ?? 0.0,
           feesPaid: double.tryParse(_feesPaidController.text.replaceAll(',', '')) ?? 0.0,
           ministryFileNumber: _ministryFileNumberController.text.isEmpty ? null : _ministryFileNumberController.text,
           genderAr: _selectedGenderAr,
@@ -221,7 +221,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
               _phoneController.text = student.phone;
               _emailController.text = student.email ?? '';
               _birthDateController.text = student.birthDate;
-              _feesDueController.text = NumberFormat('#,##0.00').format(student.feesDue ?? 0.0);
+              _feesDueController.text = NumberFormat('#,##0.00').format(student.totalFeesDue ?? 0.0);
               _feesPaidController.text = NumberFormat('#,##0.00').format(student.feesPaid ?? 0.0);
               _ministryFileNumberController.text = student.ministryFileNumber ?? '';
               _admissionDateController.text = student.admissionDate;

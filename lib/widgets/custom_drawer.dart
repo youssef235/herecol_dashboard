@@ -9,6 +9,8 @@ import '../screens/Employee/EmployeeListWithFilterScreen.dart';
 import '../screens/Employee/SalaryCategoriesScreen.dart';
 import '../screens/Employee/SalaryTrackingScreen.dart';
 import '../screens/auth/login_screen.dart';
+import '../screens/parent/AddParentScreen.dart';
+import '../screens/parent/ParentListScreen.dart';
 import '../screens/payment/AccountingManagementScreen.dart';
 import '../screens/payment/FeesManagementScreen.dart';
 import '../screens/payment/LatePaymentsScreen.dart';
@@ -65,6 +67,16 @@ class CustomDrawer extends StatelessWidget {
           'icon': Ionicons.list_outline,
           'titleFrench': 'Liste des étudiants',
           'titleArabic': 'قائمة الطلاب',
+        },
+        'AddParentScreen': { // Add AddParentScreen here
+          'icon': Ionicons.people_outline,
+          'titleFrench': 'Ajouter un parent',
+          'titleArabic': 'إضافة ولي أمر',
+        },
+        'ParentListScreen': {
+          'icon': Ionicons.people_outline,
+          'titleFrench': 'Liste des parents',
+          'titleArabic': 'قائمة أولياء الأمور',
         },
         'AttendanceManagementScreen': {
           'icon': Ionicons.calendar_outline,
@@ -130,7 +142,6 @@ class CustomDrawer extends StatelessWidget {
     final permissions = authState.permissions ?? [];
     final schoolId = authState.schoolId ?? uid;
 
-    // إذا كان المستخدم admin أو school، يحصل على جميع الشاشات، وإلا يعتمد على الصلاحيات
     final allowedScreens = (role == 'admin' || role == 'school')
         ? screenGroups.values.expand((group) => group['screens'].keys).toList()
         : permissions;
@@ -180,39 +191,34 @@ class CustomDrawer extends StatelessWidget {
                         children: [
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Icon(groupIcon, color: Colors.blue[700], size: 24),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            groupTitle.split('/')[1].trim(), // الفرنسية أولاً
-                                            style: GoogleFonts.cairo(
-                                              color: Colors.blue[800], // لون أغمق للفرنسية
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold, // سمك موحد
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            groupTitle.split('/')[0].trim(), // العربية ثانياً
-                                            style: GoogleFonts.cairo(
-                                              color: Colors.blue[600], // لون أفتح للعربية
-                                              fontSize: 16, // نفس الحجم للوضوح
-                                              fontWeight: FontWeight.bold, // سمك موحد
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
+                                Icon(groupIcon, color: Colors.blue[700], size: 24),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        groupTitle.split('/')[1].trim(),
+                                        style: GoogleFonts.cairo(
+                                          color: Colors.blue[800],
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
+                                      Text(
+                                        groupTitle.split('/')[0].trim(),
+                                        style: GoogleFonts.cairo(
+                                          color: Colors.blue[600],
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -234,19 +240,19 @@ class CustomDrawer extends StatelessWidget {
                                   screenWidget = AddStudentScreen(role: role, uid: uid);
                                   break;
                                 case 'StudentListScreen':
-                                  screenWidget = StudentListScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = StudentListScreen(schoolId: role == 'school' ? uid : schoolId);
+                                  break;
+                                case 'AddParentScreen': // Handle AddParentScreen navigation
+                                  screenWidget = AddParentScreen(role: role, uid: uid);
+                                  break;
+                                case 'ParentListScreen':
+                                  screenWidget = ParentListScreen(schoolId: uid); // Pass uid as schoolId
                                   break;
                                 case 'AttendanceManagementScreen':
-                                  screenWidget = BlocProvider.value(
-                                    value: context.read<AuthCubit>(),
-                                    child: AttendanceManagementScreen(
-                                        schoolId: role == 'school' ? uid : schoolId),
-                                  );
+                                  screenWidget = AttendanceManagementScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'FeesManagementScreen':
-                                  screenWidget = FeesManagementScreen(
-                                      schoolId: role == ' dialogsSchool' ? uid : schoolId);
+                                  screenWidget = FeesManagementScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'LatePaymentsScreen':
                                   screenWidget = LatePaymentsScreen(
@@ -255,24 +261,19 @@ class CustomDrawer extends StatelessWidget {
                                   );
                                   break;
                                 case 'AccountingManagementScreen':
-                                  screenWidget = AccountingManagementScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = AccountingManagementScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'EmployeeListWithFilterScreen':
-                                  screenWidget = EmployeeListWithFilterScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = EmployeeListWithFilterScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'AddEmployeeScreen':
-                                  screenWidget = AddEmployeeScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = AddEmployeeScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'SalaryCategoriesScreen':
-                                  screenWidget = SalaryCategoriesScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = SalaryCategoriesScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 case 'SalaryTrackingScreen':
-                                  screenWidget = SalaryTrackingScreen(
-                                      schoolId: role == 'school' ? uid : schoolId);
+                                  screenWidget = SalaryTrackingScreen(schoolId: role == 'school' ? uid : schoolId);
                                   break;
                                 default:
                                   screenWidget = screenData['widget'] as Widget;
@@ -328,40 +329,40 @@ class CustomDrawer extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Text(
-            role == 'admin'
-            ? 'Tableau de bord Super Admin'
-                : role == 'school'
-            ? 'Tableau de bord de l’école'
-              : 'Tableau de bord des employés',
-              style: GoogleFonts.cairo(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
+                Text(
+                  role == 'admin'
+                      ? 'Tableau de bord Super Admin'
+                      : role == 'school'
+                      ? 'Tableau de bord de l’école'
+                      : 'Tableau de bord des employés',
+                  style: GoogleFonts.cairo(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  role == 'admin'
+                      ? 'لوحة تحكم المشرف العام'
+                      : role == 'school'
+                      ? 'لوحة تحكم المدرسة'
+                      : 'لوحة تحكم الموظفين',
+                  style: GoogleFonts.cairo(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            Text(
-              role == 'admin'
-                  ? 'لوحة تحكم المشرف العام'
-                  : role == 'school'
-                  ? 'لوحة تحكم المدرسة'
-                  : 'لوحة تحكم الموظفين',
-              style: GoogleFonts.cairo(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
-            overflow: TextOverflow.ellipsis,
+          ),
+          IconButton(
+            icon: const Icon(Ionicons.close, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
-    ),
-    IconButton(
-    icon: const Icon(Ionicons.close, color: Colors.white),
-    onPressed: () => Navigator.pop(context),
-    ),
-    ],
-    ),
     );
   }
 
@@ -396,18 +397,18 @@ class CustomDrawer extends StatelessWidget {
               Text(
                 titleFrench,
                 style: GoogleFonts.cairo(
-                  color: Colors.blue[800], // لون أغمق قليلاً للفرنسية
+                  color: Colors.blue[800],
                   fontSize: 14,
-                  fontWeight: FontWeight.w600, // نفس السمك لكلا اللغتين
+                  fontWeight: FontWeight.w600,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
                 titleArabic,
                 style: GoogleFonts.cairo(
-                  color: Colors.blue[600], // لون أفتح قليلاً للعربية
-                  fontSize: 14, // نفس الحجم لتوحيد الوضوح
-                  fontWeight: FontWeight.w600, // نفس السمك لكلا اللغتين
+                  color: Colors.blue[600],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -420,9 +421,7 @@ class CustomDrawer extends StatelessWidget {
             );
           },
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           hoverColor: Colors.blue[100],
           selectedTileColor: Colors.blue[50],
         ),
@@ -450,7 +449,7 @@ class CustomDrawer extends StatelessWidget {
                     context.read<AuthCubit>().logout();
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (context) => LoginScreen()),
+                      MaterialPageRoute(builder: (context) =>  LoginScreen()),
                     );
                   },
                   child: Text('تسجيل الخروج', style: GoogleFonts.cairo(color: Colors.red)),

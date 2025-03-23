@@ -36,7 +36,7 @@ class StudentCubit extends Cubit<StudentState> {
     String? genderFr,
     String? role,
     String? uid,
-    required double feesDue,
+    required double totalFeesDue, // المبلغ الإجمالي الأصلي
     required double feesPaid,
     required String academicYear,
     required String ministryFileNumber,
@@ -69,18 +69,99 @@ class StudentCubit extends Cubit<StudentState> {
         birthPlaceFr: birthPlaceFr,
         genderAr: genderAr,
         genderFr: genderFr,
-        feesDue: feesDue,
+        totalFeesDue: totalFeesDue, // تعيين المبلغ الإجمالي
         feesPaid: feesPaid,
         ministryFileNumber: ministryFileNumber,
         profileImage: profileImage,
       );
       await _firebaseServices.addStudent(student);
       emit(StudentAdded());
+      fetchStudents(schoolId: schoolId);
     } catch (e) {
       emit(StudentError('فشل في إضافة الطالب: $e'));
     }
   }
 
+
+  void editPayment({
+    required String schoolId,
+    required String studentId,
+    required String paymentId,
+    required double newAmount,
+    required DateTime newDate,
+  }) async {
+    emit(StudentLoading());
+    try {
+      final updatedPayment = Payment(
+        id: paymentId,
+        amount: newAmount,
+        date: newDate,
+      );
+      await _firebaseServices.updatePayment(
+        schoolId: schoolId,
+        studentId: studentId,
+        payment: updatedPayment,
+      );
+      emit(PaymentUpdated());
+      fetchPayments(schoolId: schoolId, studentId: studentId); // تحديث القائمة
+    } catch (e) {
+      emit(StudentError('فشل في تعديل الدفع: $e'));
+    }
+  }
+
+  void deletePayment({
+    required String schoolId,
+    required String studentId,
+    required String paymentId,
+    required double amount,
+  }) async {
+    emit(StudentLoading());
+    try {
+      await _firebaseServices.deletePayment(
+        schoolId: schoolId,
+        studentId: studentId,
+        paymentId: paymentId,
+      );
+      final student = await _firebaseServices.getStudentById(schoolId: schoolId, studentId: studentId);
+       updateStudentFees(
+        schoolId: schoolId,
+        studentId: studentId,
+        totalFeesDue: student.totalFeesDue ?? 0,
+        feesPaid: (student.feesPaid ?? 0) - amount,
+      );
+      emit(PaymentDeleted());
+      fetchPayments(schoolId: schoolId, studentId: studentId); // تحديث القائمة
+    } catch (e) {
+      emit(StudentError('فشل في حذف الدفع: $e'));
+    }
+  }
+
+  void markPaymentAsUnpaid({
+    required String schoolId,
+    required String studentId,
+    required String paymentId,
+    required double amount,
+  }) async {
+    emit(StudentLoading());
+    try {
+      await _firebaseServices.deletePayment(
+        schoolId: schoolId,
+        studentId: studentId,
+        paymentId: paymentId,
+      );
+      final student = await _firebaseServices.getStudentById(schoolId: schoolId, studentId: studentId);
+       updateStudentFees(
+        schoolId: schoolId,
+        studentId: studentId,
+        totalFeesDue: student.totalFeesDue ?? 0,
+        feesPaid: (student.feesPaid ?? 0) - amount,
+      );
+      emit(PaymentMarkedUnpaid());
+      fetchPayments(schoolId: schoolId, studentId: studentId); // تحديث القائمة
+    } catch (e) {
+      emit(StudentError('فشل في تغيير الحالة إلى غير مدفوع: $e'));
+    }
+  }
   void fetchStudents({required String schoolId, String? grade, String? section, String language = 'fr'}) async {
     emit(StudentLoading());
     try {
@@ -134,6 +215,7 @@ class StudentCubit extends Cubit<StudentState> {
     _studentsSubscription?.cancel();
     return super.close();
   }
+
   void fetchAllStudents() async {
     emit(StudentLoading());
     try {
@@ -167,23 +249,6 @@ class StudentCubit extends Cubit<StudentState> {
     }
   }
 
-  void updateStudentFees({
-    required String schoolId,
-    required String studentId,
-    required double feesDue,
-    required double feesPaid,
-  }) async {
-    try {
-      await _firebaseServices.updateStudentFees(
-        schoolId: schoolId,
-        studentId: studentId,
-        feesDue: feesDue,
-        feesPaid: feesPaid,
-      );
-    } catch (e) {
-      emit(StudentError('خطأ في تحديث المصاريف: $e'));
-    }
-  }
 
   void updateStudent({
     required String schoolId,
@@ -214,11 +279,11 @@ class StudentCubit extends Cubit<StudentState> {
         studentId: studentId,
       );
       emit(StudentDeleted());
+      fetchStudents(schoolId: schoolId); // إعادة جلب الطلاب بعد الحذف
     } catch (e) {
       emit(StudentError('خطأ في حذف الطالب: $e'));
     }
   }
-
   void getStudentById({
     required String schoolId,
     required String studentId,
@@ -256,12 +321,12 @@ class StudentCubit extends Cubit<StudentState> {
     required String studentId,
     required double amount,
     required DateTime date,
+    required String installmentId,
   }) async {
     emit(StudentLoading());
     try {
-      final paymentId = DateTime.now().millisecondsSinceEpoch.toString();
       final payment = Payment(
-        id: paymentId,
+        id: installmentId,
         amount: amount,
         date: date,
       );
@@ -273,6 +338,24 @@ class StudentCubit extends Cubit<StudentState> {
       emit(PaymentAdded());
     } catch (e) {
       emit(StudentError('فشل في إضافة الدفع: $e'));
+    }
+  }
+
+  void updateStudentFees({
+    required String schoolId,
+    required String studentId,
+    required double totalFeesDue,
+    required double feesPaid,
+  }) async {
+    try {
+      await _firebaseServices.updateStudentFees(
+        schoolId: schoolId,
+        studentId: studentId,
+        totalFeesDue: totalFeesDue,
+        feesPaid: feesPaid,
+      );
+    } catch (e) {
+      emit(StudentError('خطأ في تحديث المصاريف: $e'));
     }
   }
 
@@ -291,6 +374,7 @@ class StudentCubit extends Cubit<StudentState> {
       emit(StudentError('خطأ في جلب المدفوعات: $e'));
     }
   }
+
   void addFeeStructure({
     required String schoolId,
     required FeeStructure feeStructure,
@@ -317,4 +401,19 @@ class StudentCubit extends Cubit<StudentState> {
     }
   }
 
+  void updateFeeStructure({
+    required String schoolId,
+    required FeeStructure feeStructure,
+  }) async {
+    emit(StudentLoading());
+    try {
+      await _firebaseServices.updateFeeStructure(
+        schoolId: schoolId,
+        feeStructure: feeStructure,
+      );
+      emit(FeeStructureUpdated());
+    } catch (e) {
+      emit(StudentError('فشل في تحديث هيكل المصاريف: $e'));
+    }
+  }
 }

@@ -15,10 +15,32 @@ class SalaryCubit extends Cubit<SalaryState> {
     emit(SalaryLoading());
     try {
       await _firebaseServices.addSalaryCategory(category, schoolId);
-      emit(SalaryCategoryAdded()); // إصدار حالة النجاح
-      fetchSalaryCategories(schoolId); // تحديث القائمة
+      emit(SalaryCategoryAdded());
+      fetchSalaryCategories(schoolId);
     } catch (e) {
       emit(SalaryError("خطأ في إضافة فئة الراتب: $e"));
+    }
+  }
+
+  void updateSalaryCategory(SalaryCategory category, String schoolId) async {
+    emit(SalaryLoading());
+    try {
+      await _firebaseServices.updateSalaryCategory(category, schoolId);
+      emit(SalaryCategoryUpdated());
+      fetchSalaryCategories(schoolId);
+    } catch (e) {
+      emit(SalaryError("خطأ في تعديل فئة الراتب: $e"));
+    }
+  }
+
+  void deleteSalaryCategory(String categoryId, String schoolId) async {
+    emit(SalaryLoading());
+    try {
+      await _firebaseServices.deleteSalaryCategory(categoryId, schoolId);
+      emit(SalaryCategoryDeleted());
+      fetchSalaryCategories(schoolId);
+    } catch (e) {
+      emit(SalaryError("خطأ في حذف فئة الراتب: $e"));
     }
   }
 
@@ -82,11 +104,11 @@ class SalaryCubit extends Cubit<SalaryState> {
     }
   }
 
-  void updatePaymentStatus(String schoolId, String paymentId, bool isPaid) async {
+  void updatePaymentStatus(String schoolId, String paymentId, PaymentStatus newStatus) async {
     emit(SalaryLoading());
     try {
-      await _firebaseServices.updatePaymentStatus(schoolId, paymentId, isPaid);
-      final month = '${DateTime.now().month}-${DateTime.now().year}';
+      await _firebaseServices.updatePaymentStatus(schoolId, paymentId, newStatus);
+      final month = '${DateTime.now().month}-${DateTime.now().year}'; // يمكن تعديل هذا ليتناسب مع الشهر المحدد
       fetchSalaryPayments(schoolId, month);
     } catch (e) {
       emit(SalaryError("خطأ في تحديث حالة الدفع: $e"));

@@ -28,10 +28,13 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
   double totalSalary = 0;
   DateTime selectedPaymentDate = DateTime.now();
   bool isPartialPayment = false;
+  SalaryPayment? existingPayment; // لتخزين الدفعة السابقة إن وجدت
+  double remainingAmount = 0; // المبلغ المتبقي
 
   @override
   void initState() {
     super.initState();
+    _checkExistingPayment(); // التحقق من الدفعات السابقة
     context.read<SalaryCubit>().fetchSalaryCategory(widget.schoolId, widget.employee.salaryCategoryId!);
   }
 
@@ -41,6 +44,29 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
     notesController.dispose();
     partialPaymentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkExistingPayment() async {
+    final month = widget.selectedMonth;
+    final snapshot = await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(widget.schoolId)
+        .collection('salaryPayments')
+        .where('employeeId', isEqualTo: widget.employee.id)
+        .where('month', isEqualTo: month)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      final data = snapshot.docs.first.data();
+      setState(() {
+        existingPayment = SalaryPayment.fromMap(data, snapshot.docs.first.id);
+        if (existingPayment!.status == PaymentStatus.partiallyPaid) {
+          remainingAmount = existingPayment!.totalSalary - (existingPayment!.partialAmount ?? 0);
+          partialPaymentController.text = remainingAmount.toString(); // عرض المتبقي كقيمة افتراضية
+          isPartialPayment = true; // تعيين الدفع الجزئي كافتراضي
+        }
+      });
+    }
   }
 
   Future<void> _selectPaymentDate(BuildContext context) async {
@@ -57,11 +83,23 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
     }
   }
 
+  void _calculateTotalSalary(double baseSalary, double overtimeRate) {
+    final hours = int.tryParse(overtimeController.text) ?? 0;
+    final partialAmount = isPartialPayment ? (double.tryParse(partialPaymentController.text) ?? 0) : 0;
+    final fullSalary = baseSalary + (hours * overtimeRate);
+    setState(() {
+      totalSalary = isPartialPayment ? partialAmount.toDouble() : fullSalary.toDouble();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('دفع راتب ${widget.employee.fullNameAr}'),
+        title: Text(
+          'دفع راتب ${widget.employee.fullNameAr} / Paiement salaire ${widget.employee.fullNameFr ?? widget.employee.fullNameAr}',
+          style: const TextStyle(fontSize: 18),
+        ),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
         centerTitle: true,
@@ -79,11 +117,13 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
             if (state is SalaryPaid) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('تم دفع الراتب بنجاح'),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                  content: Text(
+                    existingPayment != null && existingPayment!.status == PaymentStatus.partiallyPaid
+                        ? 'تم تحديث الدفع الجزئي بنجاح / Mise à jour du paiement partiel réussie'
+                        : 'تم دفع الراتب بنجاح / Paiement du salaire effectué avec succès',
                   ),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               );
               Navigator.pop(context);
@@ -92,9 +132,7 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                 SnackBar(
                   content: Text(state.message),
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               );
             }
@@ -107,8 +145,9 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
               if (state is SalaryCategoryLoaded) {
                 final category = state.category;
                 double baseSalary = category.fullTimeSalary;
-                double overtimeRate = category.overtimeHourRate;
-                totalSalary = totalSalary == 0 ? baseSalary : totalSalary;
+                double overtimeRate = category.overtimeHourRate ?? 0;
+                final fullSalary = baseSalary + ((int.tryParse(overtimeController.text) ?? 0) * overtimeRate);
+                totalSalary = totalSalary == 0 ? fullSalary : totalSalary;
 
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -118,16 +157,18 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                       children: [
                         Card(
                           elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
                               children: [
-                                _buildDetailRow(Icons.attach_money, 'الراتب الأساسي', '$baseSalary ${category.currency}'),
+                                _buildDetailRow(Icons.attach_money, 'الراتب الأساسي', 'Salaire de base', '$baseSalary CFA'),
                                 const Divider(),
-                                _buildDetailRow(Icons.access_time, 'سعر الساعة الإضافية', '$overtimeRate ${category.currency}'),
+                                _buildDetailRow(Icons.access_time, 'سعر الساعة الإضافية', 'Taux horaire supplémentaire', '$overtimeRate CFA'),
+                                if (existingPayment != null && existingPayment!.status == PaymentStatus.partiallyPaid) ...[
+                                  const Divider(),
+                                  _buildDetailRow(Icons.money_off, 'المتبقي', 'Restant', '$remainingAmount CFA'),
+                                ],
                               ],
                             ),
                           ),
@@ -136,19 +177,14 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                         TextField(
                           controller: overtimeController,
                           decoration: const InputDecoration(
-                            labelText: 'عدد الساعات الإضافية',
-                            hintText: 'أدخل عددًا صحيحًا',
+                            labelText: 'عدد الساعات الإضافية / Nombre d’heures supplémentaires',
+                            hintText: 'أدخل عددًا صحيحًا / Entrez un nombre entier',
                             border: OutlineInputBorder(),
                             filled: true,
                             fillColor: Colors.white,
                           ),
                           keyboardType: TextInputType.number,
-                          onChanged: (value) {
-                            final hours = int.tryParse(value) ?? 0;
-                            setState(() {
-                              totalSalary = baseSalary + (hours * overtimeRate) - (isPartialPayment ? (double.tryParse(partialPaymentController.text) ?? 0) : 0);
-                            });
-                          },
+                          onChanged: (value) => _calculateTotalSalary(baseSalary, overtimeRate),
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -159,36 +195,36 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                                 setState(() {
                                   isPartialPayment = value!;
                                   if (!isPartialPayment) partialPaymentController.clear();
-                                  totalSalary = baseSalary + ((int.tryParse(overtimeController.text) ?? 0) * overtimeRate);
+                                  _calculateTotalSalary(baseSalary, overtimeRate);
                                 });
                               },
                             ),
-                            const Text('دفع جزئي'),
+                            const Text(
+                              'دفع جزئي / Paiement partiel',
+                              style: TextStyle(fontSize: 16),
+                            ),
                           ],
                         ),
                         if (isPartialPayment)
                           TextField(
                             controller: partialPaymentController,
-                            decoration: const InputDecoration(
-                              labelText: 'المبلغ الجزئي',
-                              hintText: 'أدخل المبلغ المدفوع',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: 'المبلغ الجزئي / Montant partiel (CFA)',
+                              hintText: existingPayment != null && existingPayment!.status == PaymentStatus.partiallyPaid
+                                  ? 'أدخل مبلغًا لدفع المتبقي أو جزء آخر / Entrez un montant pour le restant ou une autre partie'
+                                  : 'أدخل المبلغ المدفوع / Entrez le montant payé',
+                              border: const OutlineInputBorder(),
                               filled: true,
                               fillColor: Colors.white,
                             ),
                             keyboardType: TextInputType.number,
-                            onChanged: (value) {
-                              final partialAmount = double.tryParse(value) ?? 0;
-                              setState(() {
-                                totalSalary = baseSalary + ((int.tryParse(overtimeController.text) ?? 0) * overtimeRate) - partialAmount;
-                              });
-                            },
+                            onChanged: (value) => _calculateTotalSalary(baseSalary, overtimeRate),
                           ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: notesController,
                           decoration: const InputDecoration(
-                            labelText: 'ملاحظات (اختياري)',
+                            labelText: 'ملاحظات / Notes (اختياري / facultatif)',
                             border: OutlineInputBorder(),
                             filled: true,
                             fillColor: Colors.white,
@@ -197,30 +233,28 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Text('تاريخ الدفع: ${selectedPaymentDate.toString().split(' ')[0]}'),
+                            Text(
+                              'تاريخ الدفع / Date de paiement: ${selectedPaymentDate.toString().split(' ')[0]}',
+                            ),
                             const SizedBox(width: 10),
                             ElevatedButton(
                               onPressed: () => _selectPaymentDate(context),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blueAccent,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
-                              child: const Text('اختر تاريخ'),
+                              child: const Text('اختر تاريخ / Choisir une date'),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
                         Card(
                           elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
-                            child: _buildDetailRow(Icons.money, 'الراتب الإجمالي', '$totalSalary ${category.currency}'),
+                            child: _buildDetailRow(Icons.money, 'الراتب الإجمالي', 'Salaire total', '$fullSalary CFA'),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -228,83 +262,126 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                           child: ElevatedButton.icon(
                             onPressed: () async {
                               final month = widget.selectedMonth;
-                              final existingPayment = await FirebaseFirestore.instance
-                                  .collection('schools')
-                                  .doc(widget.schoolId)
-                                  .collection('salaryPayments')
-                                  .where('employeeId', isEqualTo: widget.employee.id)
-                                  .where('month', isEqualTo: month)
-                                  .get();
+                              final overtimeHours = int.tryParse(overtimeController.text) ?? 0;
+                              final partialAmount = isPartialPayment ? (double.tryParse(partialPaymentController.text) ?? 0) : 0;
 
-                              if (existingPayment.docs.isNotEmpty) {
+                              if (isPartialPayment && partialAmount <= 0) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: const Text('تم دفع الراتب لهذا الشهر بالفعل'),
+                                    content: const Text('المبلغ الجزئي يجب أن يكون أكبر من صفر / Le montant partiel doit être supérieur à zéro'),
                                     behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
                                 );
                                 return;
                               }
 
-                              if (isPartialPayment && (double.tryParse(partialPaymentController.text) ?? 0) >= totalSalary) {
+                              double newPartialAmount = partialAmount.toDouble();
+                              PaymentStatus newStatus = isPartialPayment ? PaymentStatus.partiallyPaid : PaymentStatus.paid;
+                              String updatedNotes = '';
+
+                              if (existingPayment != null && existingPayment!.status == PaymentStatus.partiallyPaid) {
+                                // تحديث الدفعة الجزئية السابقة
+                                final previousPartial = existingPayment!.partialAmount ?? 0;
+                                newPartialAmount = (previousPartial + partialAmount).toDouble();
+
+                                if (newPartialAmount > fullSalary) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text('المبلغ الجزئي المحدث يتجاوز الراتب الإجمالي / Le montant partiel dépasse le salaire total'),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                newStatus = newPartialAmount >= fullSalary ? PaymentStatus.paid : PaymentStatus.partiallyPaid;
+                                updatedNotes = 'تم دفع جزء إضافي: $partialAmount CFA، الإجمالي المدفوع: $newPartialAmount CFA من $fullSalary CFA، '
+                                    'المتبقي: ${fullSalary - newPartialAmount} CFA / '
+                                    'Paiement partiel supplémentaire: $partialAmount CFA, total payé: $newPartialAmount CFA sur $fullSalary CFA, '
+                                    'restant: ${fullSalary - newPartialAmount} CFA';
+                              } else if (isPartialPayment && partialAmount >= fullSalary) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: const Text('المبلغ الجزئي يجب أن يكون أقل من الإجمالي'),
+                                    content: const Text('المبلغ الجزئي يجب أن يكون أقل من الإجمالي / Le montant partiel doit être inférieur au total'),
                                     behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
                                 );
                                 return;
+                              } else {
+                                // دفعة جديدة
+                                updatedNotes = isPartialPayment
+                                    ? 'تم دفع جزء: $partialAmount CFA من $fullSalary CFA، المتبقي: ${fullSalary - partialAmount} CFA / '
+                                    'Paiement partiel: $partialAmount CFA sur $fullSalary CFA, restant: ${fullSalary - partialAmount} CFA'
+                                    : notesController.text.isEmpty
+                                    ? ''
+                                    : notesController.text;
                               }
 
                               final payment = SalaryPayment(
-                                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                id: existingPayment?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                                 employeeId: widget.employee.id,
                                 baseSalary: baseSalary,
-                                overtimeSalary: (int.tryParse(overtimeController.text) ?? 0) * overtimeRate,
-                                totalSalary: totalSalary,
-                                overtimeHours: int.tryParse(overtimeController.text) ?? 0,
+                                overtimeSalary: overtimeHours * overtimeRate,
+                                totalSalary: fullSalary,
+                                overtimeHours: overtimeHours,
                                 month: month,
                                 paymentDate: selectedPaymentDate,
-                                isPaid: !isPartialPayment,
-                                notes: notesController.text.isEmpty ? null : notesController.text,
+                                status: newStatus,
+                                partialAmount: isPartialPayment || newStatus == PaymentStatus.partiallyPaid ? newPartialAmount : null,
+                                notes: updatedNotes,
                               );
 
                               showDialog(
                                 context: context,
                                 builder: (context) => AlertDialog(
-                                  title: const Text('تأكيد الدفع'),
-                                  content: Text('هل أنت متأكد من دفع ${isPartialPayment ? "جزء من " : ""}الراتب بقيمة $totalSalary ${category.currency}؟'),
+                                  title: const Text('تأكيد الدفع / Confirmation du paiement'),
+                                  content: Text(
+                                    'هل أنت متأكد من دفع ${isPartialPayment ? "جزء من " : ""}الراتب بقيمة $partialAmount CFA؟\n'
+                                        'المتبقي بعد الدفع: ${fullSalary - newPartialAmount} CFA\n'
+                                        'Êtes-vous sûr de payer ${isPartialPayment ? "une partie du " : ""}salaire de $partialAmount CFA ? '
+                                        'Restant après paiement: ${fullSalary - newPartialAmount} CFA',
+                                  ),
                                   actions: [
                                     TextButton(
                                       onPressed: () => Navigator.pop(context),
-                                      child: const Text('إلغاء'),
+                                      child: const Text('إلغاء / Annuler'),
                                     ),
                                     ElevatedButton(
                                       onPressed: () {
-                                        context.read<SalaryCubit>().paySalary(payment, widget.schoolId);
-                                        Navigator.pop(context);
+                                        if (existingPayment != null && existingPayment!.status == PaymentStatus.partiallyPaid) {
+                                          // تحديث الدفعة الحالية
+                                          FirebaseFirestore.instance
+                                              .collection('schools')
+                                              .doc(widget.schoolId)
+                                              .collection('salaryPayments')
+                                              .doc(existingPayment!.id)
+                                              .update(payment.toMap())
+                                              .then((_) {
+                                            context.read<SalaryCubit>().paySalary(payment, widget.schoolId);
+                                            Navigator.pop(context);
+                                          });
+                                        } else {
+                                          // إنشاء دفعة جديدة
+                                          context.read<SalaryCubit>().paySalary(payment, widget.schoolId);
+                                          Navigator.pop(context);
+                                        }
                                       },
-                                      child: const Text('تأكيد'),
+                                      child: const Text('تأكيد / Confirmer'),
                                     ),
                                   ],
                                 ),
                               );
                             },
                             icon: const Icon(Icons.payment),
-                            label: const Text('دفع الراتب'),
+                            label: const Text('دفع الراتب / Payer le salaire'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blueAccent,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             ),
                           ),
                         ),
@@ -313,7 +390,7 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
                   ),
                 );
               }
-              return const Center(child: Text('جارٍ التحميل...'));
+              return const Center(child: Text('جارٍ التحميل... / Chargement en cours...'));
             },
           ),
         ),
@@ -321,11 +398,11 @@ class _PaySalaryScreenState extends State<PaySalaryScreen> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String title, String value) {
+  Widget _buildDetailRow(IconData icon, String titleAr, String titleFr, String value) {
     return ListTile(
       leading: Icon(icon, color: Colors.blueAccent),
       title: Text(
-        title,
+        '$titleAr / $titleFr',
         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
       ),
       trailing: Text(

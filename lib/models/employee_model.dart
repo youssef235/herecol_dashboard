@@ -1,27 +1,29 @@
+import 'dart:math';
+
 class Employee {
   final String id;
-  final String fullNameAr; // الاسم الكامل بالعربية
-  final String fullNameFr; // الاسم الكامل بالفرنسية
-  final String genderAr; // الجنس بالعربية
-  final String genderFr; // الجنس بالفرنسية
-  final String birthDate; // تاريخ الميلاد
-  final String phone; // رقم الهاتف
-  final String? secondaryPhone; // رقم الهاتف الاحتياطي (اختياري)
-  final String email; // البريد الإلكتروني
-  final String addressAr; // العنوان بالعربية
-  final String addressFr; // العنوان بالفرنسية
-  final String? profileImage; // رابط صورة الملف الشخصي (اختياري)
-  final String departmentAr; // القسم الرئيسي بالعربية
-  final String subDepartmentAr; // القسم الفرعي بالعربية
-  final String departmentFr; // القسم الرئيسي بالفرنسية
-  final String subDepartmentFr; // القسم الفرعي بالفرنسية
-  final String role; // دور الموظف (مثل accounting, teacher)
-  final List<String> permissions; // الصلاحيات
+  final String fullNameAr;
+  final String fullNameFr;
+  final String genderAr;
+  final String genderFr;
+  final String birthDate;
+  final String phone;
+  final String? secondaryPhone;
+  final String email;
+  final String addressAr;
+  final String addressFr;
+  final String? profileImage;
+  final String departmentAr;
+  final String subDepartmentAr;
+  final String departmentFr;
+  final String subDepartmentFr;
+  final String role;
+  final List<String> permissions;
   final String? salaryCategoryId;
-  final String schoolId; // إضافة حقل schoolId
+  final String schoolId;
 
   Employee({
-    required this.id,
+    String? id,
     required this.fullNameAr,
     required this.fullNameFr,
     required this.genderAr,
@@ -40,13 +42,18 @@ class Employee {
     required this.subDepartmentFr,
     required this.role,
     required this.permissions,
-    required this.schoolId, // إضافة schoolId كمعلم مطلوب
-  });
+    required this.schoolId,
+  }) : id = id ?? _generateUniqueId();
 
-  // تحويل البيانات من Firestore إلى كائن Employee
+  static String _generateUniqueId() {
+    String timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(6);
+    String random = (Random().nextInt(9999)).toString().padLeft(4, '0');
+    return timestamp + random;
+  }
+
   factory Employee.fromMap(Map<String, dynamic> data, String id) {
     return Employee(
-      id: id,
+      id: data['id'] ?? id,
       fullNameAr: data['fullNameAr'] ?? '',
       fullNameFr: data['fullNameFr'] ?? '',
       genderAr: data['genderAr'] ?? '',
@@ -65,11 +72,10 @@ class Employee {
       subDepartmentFr: data['subDepartmentFr'] ?? '',
       role: data['role'] ?? '',
       permissions: List<String>.from(data['permissions'] ?? []),
-      schoolId: data['schoolId'] ?? '', // إضافة schoolId من البيانات
+      schoolId: data['schoolId'] ?? '',
     );
   }
 
-  // تحويل كائن Employee إلى بيانات لـ Firestore
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -91,7 +97,53 @@ class Employee {
       'subDepartmentFr': subDepartmentFr,
       'role': role,
       'permissions': permissions,
-      'schoolId': schoolId, // إضافة schoolId إلى الخريطة
+      'schoolId': schoolId,
     };
+  }
+
+  Employee copyWith({
+    String? id,
+    String? fullNameAr,
+    String? fullNameFr,
+    String? genderAr,
+    String? genderFr,
+    String? birthDate,
+    String? phone,
+    String? secondaryPhone,
+    String? email,
+    String? addressAr,
+    String? addressFr,
+    String? profileImage,
+    String? departmentAr,
+    String? subDepartmentAr,
+    String? departmentFr,
+    String? subDepartmentFr,
+    String? role,
+    List<String>? permissions,
+    String? salaryCategoryId,
+    String? schoolId,
+  }) {
+    return Employee(
+      id: id ?? this.id,
+      fullNameAr: fullNameAr ?? this.fullNameAr,
+      fullNameFr: fullNameFr ?? this.fullNameFr,
+      genderAr: genderAr ?? this.genderAr,
+      genderFr: genderFr ?? this.genderFr,
+      birthDate: birthDate ?? this.birthDate,
+      phone: phone ?? this.phone,
+      secondaryPhone: secondaryPhone ?? this.secondaryPhone,
+      email: email ?? this.email,
+      addressAr: addressAr ?? this.addressAr,
+      addressFr: addressFr ?? this.addressFr,
+      profileImage: profileImage ?? this.profileImage,
+      departmentAr: departmentAr ?? this.departmentAr,
+      subDepartmentAr: subDepartmentAr ?? this.subDepartmentAr,
+      departmentFr: departmentFr ?? this.departmentFr,
+      subDepartmentFr: subDepartmentFr ?? this.subDepartmentFr,
+      role: role ?? this.role,
+      permissions: permissions ?? this.permissions,
+      salaryCategoryId: salaryCategoryId ?? this.salaryCategoryId,
+      schoolId: schoolId ?? this.schoolId,
+    );
   }
 }

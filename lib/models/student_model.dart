@@ -6,30 +6,31 @@ class Student {
   final String firstNameFr;
   final String lastNameAr;
   final String lastNameFr;
-  final String gradeAr; // الصف بالعربية
-  final String gradeFr; // الصف بالفرنسية
-  final String sectionAr; // الشعبة بالعربية
-  final String sectionFr; // الشعبة بالفرنسية
-  final String? categoryAr; // الفئة بالعربية
-  final String? categoryFr; // الفئة بالفرنسية
+  final String gradeAr;
+  final String gradeFr;
+  final String sectionAr;
+  final String sectionFr;
+  final String? categoryAr;
+  final String? categoryFr;
   final String birthDate;
   final String phone;
   final String? email;
-  final String addressAr; // العنوان بالعربية
-  final String? addressFr; // العنوان بالفرنسية
-  final String academicYear; // سنة الالتحاق كاملة (مثل 2025-2026)
+  final String addressAr;
+  final String? addressFr;
+  final String academicYear;
   final String schoolId;
   final String admissionDate;
-  final String birthPlaceAr; // مكان الميلاد بالعربية
-  final String? birthPlaceFr; // مكان الميلاد بالفرنسية
+  final String birthPlaceAr;
+  final String? birthPlaceFr;
   final String? profileImage;
   final String? ministryFileNumber;
-  final String? genderAr; // الجنس بالعربية
-  final String? genderFr; // الجنس بالفرنسية
+  final String? genderAr;
+  final String? genderFr;
   final Map<String, String>? attendanceHistory;
-  final double? feesDue;
-  final double? feesPaid;
-  final FeeStructure? feeStructure; // هيكل المصاريف المرتبط بالطالب
+  final double? totalFeesDue; // المبلغ الإجمالي الأصلي المستحق
+  final double? feesPaid; // المبلغ المدفوع
+  final FeeStructure? feeStructure;
+  final String? parentId;
 
   Student({
     required this.id,
@@ -58,9 +59,10 @@ class Student {
     this.genderAr,
     this.genderFr,
     this.attendanceHistory,
-    this.feesDue,
+    this.totalFeesDue, // إضافة الحقل الجديد
     this.feesPaid,
     this.feeStructure,
+    this.parentId,
   });
 
   factory Student.fromFirestore(Map<String, dynamic> data, String id, [FeeStructure? feeStructure]) {
@@ -93,9 +95,10 @@ class Student {
       attendanceHistory: (data['attendanceHistory'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, value as String),
       ),
-      feesDue: (data['feesDue'] as num?)?.toDouble(),
+      totalFeesDue: (data['totalFeesDue'] as num?)?.toDouble(), // إضافة الحقل الجديد
       feesPaid: (data['feesPaid'] as num?)?.toDouble(),
       feeStructure: feeStructure,
+      parentId: data['parentId'],
     );
   }
 
@@ -127,8 +130,9 @@ class Student {
       'genderAr': genderAr,
       'genderFr': genderFr,
       'attendanceHistory': attendanceHistory ?? {},
-      'feesDue': feesDue,
+      'totalFeesDue': totalFeesDue, // إضافة الحقل الجديد
       'feesPaid': feesPaid,
+      'parentId': parentId,
     };
   }
 }

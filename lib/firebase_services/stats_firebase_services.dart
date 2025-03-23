@@ -45,7 +45,7 @@ class StatsFirebaseServices {
           final attendanceMap = studentDoc.get('attendanceHistory') as Map<String, dynamic>?;
           final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
           final attendance = attendanceMap?[today] ?? 'غير محدد';
-          final feesDue = studentDoc.get('feesDue') as double? ?? 0.0;
+          final feesDue = studentDoc.get('totalFeesDue') as double? ?? 0.0;
 
           studentsPerGrade[gradeAr] = (studentsPerGrade[gradeAr] ?? 0) + 1;
           totalFeesDue += feesDue;
@@ -109,7 +109,7 @@ class StatsFirebaseServices {
             final attendanceMap = studentDoc.get('attendanceHistory') as Map<String, dynamic>?;
             final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
             final attendance = attendanceMap?[today] ?? 'غير محدد';
-            final feesDue = studentDoc.get('feesDue') as double? ?? 0.0;
+            final feesDue = studentDoc.get('totalFeesDue') as double? ?? 0.0;
 
             studentsPerGrade[gradeAr] = (studentsPerGrade[gradeAr] ?? 0) + 1;
             totalFeesDue += feesDue;
@@ -234,7 +234,7 @@ class StatsFirebaseServices {
             final attendanceMap = studentDoc.get('attendanceHistory') as Map<String, dynamic>?;
             final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
             final attendance = attendanceMap?[today] ?? 'غير محدد';
-            final feesDue = studentDoc.get('feesDue') as double? ?? 0.0;
+            final feesDue = studentDoc.get('totalFeesDue') as double? ?? 0.0;
 
             studentsPerGrade[gradeAr] = (studentsPerGrade[gradeAr] ?? 0) + 1;
             totalFeesDue += feesDue;
@@ -319,7 +319,7 @@ class StatsFirebaseServices {
       final attendanceMap = studentDoc.get('attendanceHistory') as Map<String, dynamic>?;
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final attendance = attendanceMap?[today] ?? 'غير محدد';
-      final feesDue = studentDoc.get('feesDue') as double? ?? 0.0;
+      final feesDue = studentDoc.get('totalFeesDue') as double? ?? 0.0;
 
       studentsPerGrade[gradeAr] = (studentsPerGrade[gradeAr] ?? 0) + 1;
       totalFeesDue += feesDue;

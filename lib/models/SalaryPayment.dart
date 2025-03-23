@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum PaymentStatus { paid, unpaid, partiallyPaid }
+
 class SalaryPayment {
   final String id;
   final String employeeId;
@@ -9,8 +11,9 @@ class SalaryPayment {
   final int overtimeHours;
   final String month;
   final DateTime paymentDate;
-  final bool isPaid;
-  final String? notes; // جديد
+  final PaymentStatus status; // استبدال isPaid بـ enum
+  final double? partialAmount; // المبلغ الجزئي المدفوع
+  final String? notes;
 
   SalaryPayment({
     required this.id,
@@ -21,7 +24,8 @@ class SalaryPayment {
     required this.overtimeHours,
     required this.month,
     required this.paymentDate,
-    required this.isPaid,
+    required this.status,
+    this.partialAmount,
     this.notes,
   });
 
@@ -35,7 +39,8 @@ class SalaryPayment {
       'overtimeHours': overtimeHours,
       'month': month,
       'paymentDate': Timestamp.fromDate(paymentDate),
-      'isPaid': isPaid,
+      'status': status.toString().split('.').last, // حفظ كـ string في Firestore
+      'partialAmount': partialAmount,
       'notes': notes,
     };
   }
@@ -50,7 +55,11 @@ class SalaryPayment {
       overtimeHours: map['overtimeHours'],
       month: map['month'],
       paymentDate: (map['paymentDate'] as Timestamp).toDate(),
-      isPaid: map['isPaid'],
+      status: PaymentStatus.values.firstWhere(
+            (e) => e.toString().split('.').last == map['status'],
+        orElse: () => PaymentStatus.unpaid, // قيمة افتراضية إذا لم يتم العثور على حالة
+      ),
+      partialAmount: map['partialAmount'],
       notes: map['notes'],
     );
   }
